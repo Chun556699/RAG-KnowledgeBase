@@ -1,8 +1,74 @@
-# 🧩 AI 知识库平台（AI Knowledge Base Platform）
+# 🧩 AI 知识库平台 · AI Knowledge Base Platform
 
-> 一个**生产级**的综合性 AI 应用，集成 **RAG 检索增强生成、Agent 智能体、多模型 LLM、上下文记忆管理** 四大能力，并配备现代化的 React Web 界面。LLM 支持 **DeepSeek** 与 **小米 MiMo**（均兼容 OpenAI 协议），填入任一 API Key 即可运行时切换；嵌入与向量检索采用**离线确定性嵌入 + 本地轻量向量库**，无需密钥即可完成文档入库与检索。
+<p><b>简体中文</b>　｜　<a href="#-english-introduction">English</a></p>
 
-本项目作为 AI 应用开发能力的技术作品集，覆盖了现代 AI 产品从数据摄取、向量检索、提示工程、智能体编排到多轮记忆与前端交互的完整技术栈。
+> **一句话**：独立设计并实现的**生产级 AI 知识库平台**，打通 **RAG（真实语义嵌入 + 两阶段重排序）、ReAct 智能体、多模型 LLM、上下文记忆、知识图谱** 五大能力；支持在 **Web 端接入 / 切换大模型密钥并脱密保护**，前后端分离 + 分层架构，Docker 一键部署。
+
+本项目覆盖现代 AI 产品「文档摄取 → 向量检索 → 提示工程 → 智能体编排 → 多轮记忆 → 知识图谱 → 前端交互」的完整链路，是一个可运行、可测试、可扩展的工程作品集。为保证可演示性，嵌入内置**离线确定性 Mock**（零密钥即可跑通整条 RAG 链路），生产可一键切换为**真实语义嵌入（bge-m3）**。
+
+### 🌍 English Introduction
+
+> A **production-grade AI Knowledge Base Platform**, independently designed and built, integrating five core capabilities: **RAG (real semantic embeddings + two-stage reranking), a ReAct agent, multi-provider LLMs, contextual memory, and a knowledge graph**. LLM / embedding / reranker **API keys can be configured and hot-switched from the Web UI with secret masking** — keys never leave the page. Decoupled frontend/backend with a layered architecture, one-command Docker deployment.
+
+It covers the full modern-AI pipeline — *document ingestion → vector retrieval → prompt engineering → agent orchestration → multi-turn memory → knowledge graph → web interaction* — as a runnable, testable and extensible engineering showcase. A built-in **offline deterministic mock embedder** lets the entire RAG chain run with **zero keys** (ideal for demos, CI and the 49 offline unit tests); switch to **real semantic embeddings (bge-m3)** for production.
+
+---
+
+## 🏛️ 系统架构 · Architecture
+
+**前后端分离 + 后端四层**，依赖方向自上而下，核心能力层不感知上层。_Decoupled frontend/backend with a four-layer backend; dependencies point downward and the core layer is framework-agnostic._
+
+```mermaid
+flowchart TB
+    subgraph Client["🖥️ 前端 Frontend · React 18 + Vite + TypeScript"]
+        UI["Chat / Documents / Graph / Agent / Memory / Prompt / Settings 面板"]
+    end
+
+    subgraph Gateway["🌐 网关 Gateway"]
+        NG["Nginx 静态托管 + /api 反代（生产）<br/>Vite Proxy（开发）"]
+    end
+
+    subgraph Backend["⚙️ 后端 Backend · FastAPI · Python 3.11"]
+        APP["main.py · CORS / 全局异常 / lifespan / 路由注册"]
+        API["API 路由层 app/api<br/>documents · chat · agent · memory · models · graph · settings"]
+        SVC["服务编排层 app/services<br/>Container 组合根 · Document / Chat / Agent / Graph Service"]
+        subgraph CORE["核心能力层 app/core"]
+            LLM["LLM 抽象 + 工厂"]
+            RAG["RAG 两阶段检索"]
+            AGENT["ReAct Agent"]
+            MEM["Memory 记忆"]
+            GRAPH["知识图谱"]
+            CFG["RuntimeConfigStore<br/>运行时配置 + 脱密"]
+        end
+        APP --> API --> SVC --> CORE
+    end
+
+    subgraph Infra["🗄️ 基础设施 Infrastructure"]
+        VS["numpy 向量库"]
+        DB["SQLite"]
+        FS["文件系统 / 上传"]
+    end
+
+    subgraph External["☁️ 外部服务 External · OpenAI 兼容"]
+        EXLLM["DeepSeek / 小米 MiMo"]
+        EMB["Embedding bge-m3"]
+        RR["Reranker bge-reranker-v2-m3"]
+    end
+
+    UI -->|"HTTP / SSE"| NG
+    NG --> APP
+
+    RAG --> VS
+    RAG --> EMB
+    RAG --> RR
+    RAG --> FS
+    MEM --> DB
+    LLM --> EXLLM
+    CFG -.->|"凭据单一事实来源"| LLM
+    CFG -.-> RAG
+```
+
+> 更详细的分层职责与模块深剖见 [`docs/system-overview.md`](./docs/system-overview.md)。
 
 ---
 
@@ -10,21 +76,23 @@
 
 | 模块 | 能力 |
 | --- | --- |
-| **RAG 检索增强** | 多格式文档（PDF/Word/TXT/Markdown）上传 → 自动解析 → 递归分块 → 向量化入库；基于向量相似度的语义检索；检索结果注入 LLM 生成有据可依的回答 |
-| **Agent 智能体** | 复杂任务自动拆解（规划）→ 工具调用（计算器/时间/知识库检索）→ 结果汇总 → 自我反思迭代，全过程可视化 |
-| **多模型 LLM** | 统一抽象层支持 DeepSeek / 小米 MiMo（均兼容 OpenAI 协议）；工厂模式 + 实例缓存；运行时一键切换；模板化提示工程 |
-| **上下文记忆** | 多轮会话上下文维护；长期记忆持久化（含主题、重要度）；跨会话历史检索；TTL 过期自动清理 |
+| **RAG 检索增强** | 多格式文档（PDF/Word/TXT/Markdown）上传 → 解析 → 递归分块 → 向量化入库；**两阶段语义检索**（向量召回 + 重排精排）；相关性阈值过滤，无据不编造 |
+| **多模型 LLM** | 统一抽象层封装 DeepSeek / 小米 MiMo（均兼容 OpenAI 协议）；工厂模式 + 实例缓存；运行时一键切换；模板化提示工程；SSE 流式输出 |
+| **ReAct 智能体** | 复杂任务自动拆解（规划）→ 工具调用（计算器/时间/知识库检索）→ 结果汇总 → 自我反思迭代，全过程可视化 |
+| **上下文记忆** | 多轮会话上下文维护；长期记忆持久化（主题 + 重要度 + TTL）；跨会话历史检索；过期自动清理 |
+| **知识图谱** | LLM 抽取「实体-关系-实体」三元组 → 并发限流 → 聚合去重加权 → cytoscape 可视化 |
+| **系统设置** | Web 端配置 / 切换 LLM、嵌入、重排序密钥；脱敏展示；热重载免重启 |
 | **前端界面** | 深色主题、响应式布局；SSE 流式打字机效果；检索来源展示；Agent 执行轨迹时间线；实时健康状态 |
 
 ---
 
 ## 🏗️ 技术栈
 
-- **后端**：Python 3.11 · FastAPI · Pydantic v2 · 本地轻量向量库(numpy) · SQLite · asyncio
-- **模型**：DeepSeek · 小米 MiMo（均兼容 OpenAI 协议，可运行时切换）
-- **前端**：React 18 · Vite 5 · TypeScript（strict）· 原生 SSE 流式解析
+- **后端**：Python 3.11 · FastAPI · Pydantic v2 · pydantic-settings · asyncio · openai SDK · httpx · 本地 numpy 向量库 · SQLite
+- **模型 / 服务**：DeepSeek · 小米 MiMo（OpenAI 兼容，可运行时切换）；嵌入 bge-m3；重排序 bge-reranker-v2-m3
+- **前端**：React 18 · Vite 5 · TypeScript（strict）· 原生 SSE 流式解析 · cytoscape
 - **部署**：Docker · Docker Compose · Nginx（静态托管 + API 反向代理）
-- **测试**：pytest · pytest-asyncio
+- **测试**：pytest · pytest-asyncio（49 例，全离线）
 
 > 架构、API、部署的详细文档见 [`docs/`](./docs) 目录：
 > - [架构设计](./docs/architecture.md)
@@ -168,6 +236,8 @@ our-project/
 
 ---
 
-## 📄 许可
+## 📄 许可 · License
 
-本项目用于技术能力展示（作品集），可自由参考学习。
+本项目基于 [MIT License](./LICENSE) 开源，可自由使用、修改与商用，保留版权声明即可。
+
+_Licensed under the [MIT License](./LICENSE) — free to use, modify and distribute with attribution._
