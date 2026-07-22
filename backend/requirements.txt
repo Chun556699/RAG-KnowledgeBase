@@ -1,0 +1,32 @@
+# ============================================================
+# AI 知识库产品 - 后端依赖清单
+# ============================================================
+# Web 框架与 ASGI 服务器
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9          # 处理 multipart/form-data 文件上传
+
+# 配置与数据校验
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# 向量数据库（本地轻量向量库，基于 numpy 实现，零外部服务依赖）
+# 说明：已由内置 numpy 向量库替代 ChromaDB，无需额外向量数据库依赖。
+
+# 文档解析（RAG 文档加载）
+pypdf==5.0.0                      # PDF 解析
+python-docx==1.1.2               # Word (.docx) 解析
+
+# LLM 提供商 SDK（DeepSeek / 小米 MiMo 均兼容 OpenAI 协议，复用 openai SDK）
+openai==1.51.0
+
+# HTTP 客户端
+httpx==0.27.2
+
+# 工具库
+tenacity==9.0.0                   # 重试机制
+numpy>=2.1.0                      # 向量运算（Mock 嵌入 + 本地向量库）
+
+# 测试
+pytest==8.3.3
+pytest-asyncio==0.24.0

@@ -1,0 +1,41 @@
+# ========== Python / 后端 ==========
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 运行时数据（向量库、记忆库、上传文件）
+backend/data/
+data/
+
+# 环境变量（切勿提交真实密钥）
+.env
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# ========== Node / 前端 ==========
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========== 编辑器 / 系统 ==========
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ========== 日志 ==========
+*.log
+logs/

@@ -1,0 +1,55 @@
+# ============================================================
+# Docker Compose - AI 知识库产品一键编排
+# 启动：docker compose up -d --build
+# 访问：http://localhost（前端），后端文档 http://localhost:8000/docs
+# ============================================================
+services:
+  # ---------- 后端服务 ----------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aikb-backend
+    restart: unless-stopped
+    environment:
+      # 仅保留 DeepSeek 与小米 MiMo（均兼容 OpenAI 协议）。
+      # 填入对应 API Key 后即可在前端运行时切换模型。
+      APP_ENV: production
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-deepseek}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      MIMO_API_KEY: ${MIMO_API_KEY:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}
+      # 数据目录固定到 /app/data，配合下方卷持久化
+      # （文档元数据 _documents.json 存放于 UPLOAD_DIR 内）
+      VECTOR_STORE_PATH: /app/data/vectorstore.json
+      MEMORY_DB_PATH: /app/data/memory.db
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      # 持久化向量库 / 记忆库 / 文档元数据，容器重建不丢数据
+      - backend_data:/app/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---------- 前端服务 ----------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aikb-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+# 命名卷：持久化后端数据
+volumes:
+  backend_data:
+    driver: local

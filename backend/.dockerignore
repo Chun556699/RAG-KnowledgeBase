@@ -1,0 +1,18 @@
+# 后端 Docker 构建忽略清单
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+data/
+*.db
+*.sqlite3
+.env
+.git/
+.gitignore
+tests/
+*.md

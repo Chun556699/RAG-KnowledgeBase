@@ -1,0 +1,10 @@
+# 前端 Docker 构建忽略清单
+node_modules/
+dist/
+.vite/
+*.log
+.env
+.env.local
+.git/
+.gitignore
+*.md
