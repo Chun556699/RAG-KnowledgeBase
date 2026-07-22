@@ -14,6 +14,15 @@ It covers the full modern-AI pipeline — *document ingestion → vector retriev
 
 ---
 
+## 🖥️ 界面预览 · Screenshot
+
+![AI 知识库平台 Web 界面 · Web UI](./docs/assets/screenshot.png)
+
+> 单页应用，左侧导航涵盖**智能对话、知识库、知识图谱、智能体、记忆管理、提示工程、系统设置**七大模块；顶部可实时切换模型，底部实时健康状态。
+> _A single-page app; the sidebar covers all seven modules: Chat, Documents, Knowledge Graph, Agent, Memory, Prompt Engineering and Settings._
+
+---
+
 ## 🏛️ 系统架构 · Architecture
 
 **前后端分离 + 后端四层**，依赖方向自上而下，核心能力层不感知上层。_Decoupled frontend/backend with a four-layer backend; dependencies point downward and the core layer is framework-agnostic._
