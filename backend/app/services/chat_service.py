@@ -10,9 +10,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
+from app.core.graph.search import GraphSearcher
 from app.core.llm.base import GenerationConfig, Message, Role
 from app.core.llm.factory import LLMFactory
 from app.core.llm.prompt import get_template
@@ -38,6 +39,8 @@ class ChatContext:
     used_rag_context: bool = False
     # 若本次判定为反问澄清，则为 {"question": str, "options": List[str]}；否则 None
     clarify: Optional[Dict] = None
+    # 图谱增强检索命中的实体关系三元组（GraphRAG）
+    graph_triples: List[Dict] = field(default_factory=list)
 
 
 class ChatService:
@@ -49,11 +52,13 @@ class ChatService:
         retriever: Retriever,
         memory: MemoryManager,
         settings: Settings,
+        graph_searcher: Optional[GraphSearcher] = None,
     ) -> None:
         self._llm_factory = llm_factory
         self._retriever = retriever
         self._memory = memory
         self._settings = settings
+        self._graph_searcher = graph_searcher
 
     async def _rewrite_query(
         self,
@@ -176,6 +181,7 @@ class ChatService:
 
         # 2) RAG 检索（含多轮查询改写与相关性阈值过滤）
         sources: List[RetrievedChunk] = []
+        graph_triples: List[Dict] = []
         messages: List[Message] = []
         used_rag_context = False
         if use_rag:
@@ -189,6 +195,14 @@ class ChatService:
                 min_score=self._settings.retrieval_min_score,
             )
             context = self._retriever.build_context(sources)
+
+            # 图谱增强检索（GraphRAG）：提取相关实体关系三元组并合并上下文
+            if self._graph_searcher is not None:
+                graph_triples = self._graph_searcher.search(retrieval_query)
+                graph_context = GraphSearcher.build_context(graph_triples)
+                if graph_context:
+                    context = f"{context}\n\n{graph_context}" if context else graph_context
+
             if context:
                 system_prompt = get_template("rag_system").render(context=context)
                 used_rag_context = True
@@ -214,6 +228,7 @@ class ChatService:
             provider_name="",
             model_name="",
             used_rag_context=used_rag_context,
+            graph_triples=graph_triples,
         )
 
     async def chat(

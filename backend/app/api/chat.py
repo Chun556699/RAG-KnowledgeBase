@@ -16,6 +16,7 @@ from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     ClarifySchema,
+    GraphTripleSchema,
     RetrievedChunkSchema,
 )
 from app.services.container import Container, get_container
@@ -57,6 +58,7 @@ async def chat(
         session_id=ctx.session_id,
         answer=answer,
         sources=_sources_schema(ctx.sources),
+        graph_triples=[GraphTripleSchema(**t) for t in ctx.graph_triples],
         provider=ctx.provider_name,
         model=ctx.model_name,
         clarify=ClarifySchema(**ctx.clarify) if ctx.clarify else None,

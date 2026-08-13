@@ -53,6 +53,14 @@ class RetrievedChunkSchema(BaseModel):
     filename: str = Field(..., description="来源文件名")
 
 
+class GraphTripleSchema(BaseModel):
+    """知识图谱检索命中的实体关系三元组。"""
+
+    source: str = Field(..., description="起始实体")
+    relation: str = Field(..., description="关系描述")
+    target: str = Field(..., description="目标实体")
+
+
 class SearchRequest(BaseModel):
     """语义检索请求。"""
 
@@ -99,6 +107,9 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[RetrievedChunkSchema] = Field(
         default_factory=list, description="回答所依据的检索来源"
+    )
+    graph_triples: List[GraphTripleSchema] = Field(
+        default_factory=list, description="图谱增强检索命中的实体关系三元组"
     )
     provider: str
     model: str

@@ -18,6 +18,7 @@ from app.core.agent.tools import (
     ToolRegistry,
 )
 from app.core.config_store import RuntimeConfigStore, get_config_store
+from app.core.graph.search import GraphSearcher
 from app.core.llm.factory import LLMFactory, get_llm_factory
 from app.core.memory.manager import MemoryManager
 from app.core.memory.store import MemoryStore
@@ -113,11 +114,14 @@ class Container:
         )
 
         # ---------- 高层业务服务 ----------
+        # 图谱检索器：图增强检索（GraphRAG），惰性获取最新图谱（lambda 延迟到 self.graph 就绪后）
+        self.graph_searcher = GraphSearcher(lambda: self.graph.get_graph())
         self.chat = ChatService(
             llm_factory=self.llm_factory,
             retriever=self.retriever,
             memory=self.memory,
             settings=settings,
+            graph_searcher=self.graph_searcher,
         )
         self.agent = AgentService(
             llm_factory=self.llm_factory,
