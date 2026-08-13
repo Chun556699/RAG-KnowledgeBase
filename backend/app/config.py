@@ -93,6 +93,13 @@ class Settings(BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 50
     retrieval_top_k: int = 4
+    # 是否启用混合检索（向量稠密 + BM25 稀疏 + RRF 融合），提升专有名词/精确匹配的召回
+    hybrid_search_enabled: bool = True
+    # RRF 倒数排名融合的平滑参数（越小排名影响越显著）
+    rrf_k: int = 60
+    # RRF 融合两路权重（精确匹配/专有名词场景可调高 sparse_weight；语义场景可调高 dense_weight）
+    hybrid_dense_weight: float = 1.0
+    hybrid_sparse_weight: float = 1.0
     # 检索相关性阈值：低于该余弦相似度的片段视为噪音被过滤，命中为空时如实回退不编造。
     # 说明：Mock 词袋嵌入分数偏低（建议 0.05 左右）；真实语义嵌入分数偏高（建议 0.3 左右）。
     retrieval_min_score: float = 0.05

@@ -24,6 +24,7 @@ from app.core.memory.store import MemoryStore
 from app.core.rag.embeddings import create_embedder
 from app.core.rag.reranker import create_reranker
 from app.core.rag.retriever import Retriever
+from app.core.rag.sparse import BM25Index
 from app.core.rag.splitter import TextSplitter
 from app.core.rag.vectorstore import VectorStore
 from app.services.agent_service import AgentService
@@ -74,11 +75,18 @@ class Container:
         # 重排序（两阶段检索）：未启用/未配置密钥时为 NoOp，零副作用
         rr_cfg = self.config_store.effective_reranker()
         reranker = create_reranker(rr_cfg)
+        # 稀疏索引（BM25）：与向量索引同步维护，用于混合检索
+        sparse_index = BM25Index() if settings.hybrid_search_enabled else None
         self.retriever = Retriever(
             vector_store,
             splitter,
             reranker=reranker,
             candidate_k=int(rr_cfg["candidate_k"]),
+            sparse_index=sparse_index,
+            hybrid_enabled=settings.hybrid_search_enabled,
+            rrf_k=settings.rrf_k,
+            dense_weight=settings.hybrid_dense_weight,
+            sparse_weight=settings.hybrid_sparse_weight,
         )
 
         # 文档服务：编排上传 → 解析 → 索引 → 元数据管理

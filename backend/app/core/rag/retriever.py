@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 
 from app.core.rag.embeddings import BaseEmbedder
 from app.core.rag.reranker import BaseReranker, NoOpReranker
+from app.core.rag.sparse import BM25Index
 from app.core.rag.splitter import TextSplitter
 from app.core.rag.vectorstore import RetrievedChunk, VectorStore
 from app.utils.logger import get_logger
@@ -28,18 +29,33 @@ class Retriever:
         splitter: TextSplitter,
         reranker: Optional[BaseReranker] = None,
         candidate_k: int = 20,
+        sparse_index: Optional[BM25Index] = None,
+        hybrid_enabled: bool = True,
+        rrf_k: int = 60,
+        dense_weight: float = 1.0,
+        sparse_weight: float = 1.0,
     ) -> None:
         """
         Args:
             vector_store: 向量存储实例。
             splitter: 文本分块器实例。
             reranker: 重排序器，为 None 时不启用（等价于 NoOp）。
-            candidate_k: 启用重排序时，第一阶段向量召回的候选片段数。
+            candidate_k: 启用重排序/混合检索时，第一阶段召回的候选片段数。
+            sparse_index: BM25 稀疏索引；提供且 hybrid_enabled=True 时启用混合检索。
+            hybrid_enabled: 是否启用「向量 + 稀疏」混合检索。
+            rrf_k: RRF（倒数排名融合）的平滑参数，越小排名影响越显著。
+            dense_weight: RRF 中向量路的权重（语义场景可调高）。
+            sparse_weight: RRF 中稀疏路的权重（精确匹配/专有名词场景可调高）。
         """
         self._store = vector_store
         self._splitter = splitter
         self._reranker: BaseReranker = reranker or NoOpReranker()
         self._candidate_k = candidate_k
+        self._sparse = sparse_index
+        self._hybrid = hybrid_enabled
+        self._rrf_k = rrf_k
+        self._dense_weight = dense_weight
+        self._sparse_weight = sparse_weight
 
     def set_reranker(self, reranker: BaseReranker, candidate_k: Optional[int] = None) -> None:
         """热替换重排序器（配置变更后由容器调用），可同时更新候选召回数。"""
@@ -88,6 +104,10 @@ class Retriever:
             )
 
         self._store.add_chunks(chunk_ids, texts, metadatas)
+        # 同步更新稀疏索引（混合检索用）
+        if self._sparse is not None:
+            for cid, t, m in zip(chunk_ids, texts, metadatas):
+                self._sparse.add(cid, t, m)
         logger.info("文档 %s 索引完成，共 %d 个片段", filename, len(chunks))
         return len(chunks)
 
@@ -99,10 +119,12 @@ class Retriever:
         min_score: float = 0.0,
     ) -> List[RetrievedChunk]:
         """
-        语义检索与查询最相关的片段。
+        检索与查询最相关的片段（支持混合检索 + 可选重排序）。
 
-        若启用了重排序，则走两阶段：先从向量库召回 candidate_k 条候选（不过滤阈值），
-        再由重排序模型精排至 top_k，最后按 min_score 过滤。重排序失败会自动降级。
+        检索策略：
+        1. 混合检索（默认）：向量稠密检索 + BM25 稀疏检索 → RRF 倒数排名融合；
+        2. 若启用重排序，则在融合后再由 Cross-Encoder 精排；
+        3. 最后按 min_score 过滤噪音。任一路失败都会降级而不阻断主流程。
 
         Args:
             query: 查询文本。
@@ -115,7 +137,32 @@ class Retriever:
         """
         where = {"document_id": document_id} if document_id else None
 
-        # 两阶段：启用重排序时先宽召回再精排
+        # 混合检索：向量 + 稀疏 → RRF 融合
+        if self._hybrid and self._sparse is not None:
+            candidate_k = max(top_k, self._candidate_k)
+            dense = self._store.query(
+                query, top_k=candidate_k, where=where, min_score=0.0
+            )
+            sparse = self._sparse.search(query, top_k=candidate_k)
+            if document_id:
+                sparse = [
+                    h for h in sparse
+                    if h.metadata.get("document_id") == document_id
+                ]
+            fused = self._rrf_fuse(
+                dense, sparse, top_k=top_k, k=self._rrf_k,
+                dense_weight=self._dense_weight, sparse_weight=self._sparse_weight,
+            )
+            if self._reranker.enabled:
+                fused = self._reranker.rerank(query, fused, top_n=top_k)
+            results = [c for c in fused if c.score >= min_score]
+            logger.info(
+                "混合检索 '%s'：向量 %d + 稀疏 %d → 融合 %d（阈值=%.3f）",
+                query[:30], len(dense), len(sparse), len(results), min_score,
+            )
+            return results
+
+        # 纯向量检索（未启用混合检索时）：两阶段（召回 + 重排）
         if self._reranker.enabled:
             candidate_k = max(top_k, self._candidate_k)
             candidates = self._store.query(
@@ -133,9 +180,64 @@ class Retriever:
         logger.info("检索 '%s' 命中 %d 个片段（阈值=%.3f）", query[:30], len(results), min_score)
         return results
 
+    @staticmethod
+    def _rrf_fuse(
+        dense: List[RetrievedChunk],
+        sparse: List,
+        top_k: int,
+        k: int = 60,
+        dense_weight: float = 1.0,
+        sparse_weight: float = 1.0,
+    ) -> List[RetrievedChunk]:
+        """
+        RRF（Reciprocal Rank Fusion）倒数排名融合（支持两路加权）。
+
+        将两路检索结果按各自排名累加 ``weight/(k + rank)``，使两路都命中的片段
+        排名靠前；得分归一化到 0~1（1.0 = 两路均排名第一）。
+
+        Args:
+            dense: 向量检索结果（RetrievedChunk 列表）。
+            sparse: 稀疏检索结果（SparseHit 列表，鸭子类型）。
+            top_k: 融合后返回条数。
+            k: 平滑参数。
+            dense_weight: 向量路权重。
+            sparse_weight: 稀疏路权重。
+
+        Returns:
+            List[RetrievedChunk]: 融合后的片段，score 为归一化 RRF 得分。
+        """
+        rrf: Dict[str, float] = {}
+        by_id: Dict[str, RetrievedChunk] = {}
+        for rank, c in enumerate(dense):
+            rrf[c.chunk_id] = rrf.get(c.chunk_id, 0.0) + dense_weight / (k + rank + 1)
+            by_id[c.chunk_id] = c
+        for rank, h in enumerate(sparse):
+            rrf[h.chunk_id] = rrf.get(h.chunk_id, 0.0) + sparse_weight / (k + rank + 1)
+            if h.chunk_id not in by_id:
+                by_id[h.chunk_id] = RetrievedChunk(
+                    chunk_id=h.chunk_id,
+                    text=h.text,
+                    score=0.0,
+                    metadata=h.metadata,
+                )
+
+        max_rrf = (dense_weight + sparse_weight) / (k + 1)  # 两路均第一名的理论上限
+        ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        return [
+            RetrievedChunk(
+                chunk_id=by_id[cid].chunk_id,
+                text=by_id[cid].text,
+                score=round(rrf_score / max_rrf, 4),
+                metadata=by_id[cid].metadata,
+            )
+            for cid, rrf_score in ranked
+        ]
+
     def delete_document(self, document_id: str) -> None:
         """删除某文档的全部索引片段。"""
         self._store.delete_by_document(document_id)
+        if self._sparse is not None:
+            self._sparse.remove_by_document(document_id)
 
     def count(self) -> int:
         """返回向量库中的片段总数。"""
