@@ -195,3 +195,9 @@ export interface ConnectionTestResult {
   ok: boolean
   message: string
 }
+
+/** RAG 质量评估结果（RAGAS） */
+export interface EvaluationResponse {
+  faithfulness: number
+  answer_relevancy: number
+}

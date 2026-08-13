@@ -11,6 +11,7 @@ import type {
   Clarify,
   ConnectionTestResult,
   DocumentInfo,
+  EvaluationResponse,
   GraphData,
   GraphTriple,
   LongTermItem,
@@ -209,6 +210,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  // -------- 评估 --------
+  /** 评估 RAG 回答质量（faithfulness + answer_relevancy） */
+  evaluate: (payload: { question: string; answer: string; context?: string; provider?: string }) =>
+    request<EvaluationResponse>('/api/evaluation', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 }
 
 /**
@@ -264,13 +273,17 @@ export async function chatStream(
       for (const evt of events) {
         const line = evt.trim()
         if (!line.startsWith('data:')) continue
-        const json = JSON.parse(line.slice(5).trim())
-        if (json.type === 'meta') handlers.onMeta?.(json)
-        else if (json.type === 'clarify') handlers.onClarify?.(json)
-        else if (json.type === 'delta') handlers.onDelta?.(json.content)
-        else if (json.type === 'done') {
-          finished = true
-          handlers.onDone?.()
+        try {
+          const json = JSON.parse(line.slice(5).trim())
+          if (json.type === 'meta') handlers.onMeta?.(json)
+          else if (json.type === 'clarify') handlers.onClarify?.(json)
+          else if (json.type === 'delta') handlers.onDelta?.(json.content)
+          else if (json.type === 'done') {
+            finished = true
+            handlers.onDone?.()
+          }
+        } catch {
+          // 忽略无法解析的事件行，避免单行坏数据中断整个流
         }
       }
     }

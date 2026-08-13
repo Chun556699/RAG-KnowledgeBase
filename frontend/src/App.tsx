@@ -19,9 +19,10 @@ import MemoryPanel from './components/MemoryPanel'
 import PromptPanel from './components/PromptPanel'
 import GraphPanel from './components/GraphPanel'
 import SettingsPanel from './components/SettingsPanel'
+import EvaluationPanel from './components/EvaluationPanel'
 
 /** 功能页标识 */
-type Tab = 'chat' | 'documents' | 'graph' | 'agent' | 'memory' | 'prompt' | 'settings'
+type Tab = 'chat' | 'documents' | 'graph' | 'agent' | 'memory' | 'prompt' | 'evaluation' | 'settings'
 
 /** 导航项配置 */
 const NAV: { key: Tab; icon: IconName; label: string }[] = [
@@ -31,6 +32,7 @@ const NAV: { key: Tab; icon: IconName; label: string }[] = [
   { key: 'agent', icon: 'cpu', label: '智能体' },
   { key: 'memory', icon: 'database', label: '记忆管理' },
   { key: 'prompt', icon: 'code', label: '提示工程' },
+  { key: 'evaluation', icon: 'activity', label: '质量评估' },
   { key: 'settings', icon: 'settings', label: '系统设置' },
 ]
 
@@ -103,6 +105,7 @@ export default function App() {
           {tab === 'agent' && <AgentPanel model={model} />}
           {tab === 'memory' && <MemoryPanel />}
           {tab === 'prompt' && <PromptPanel />}
+          {tab === 'evaluation' && <EvaluationPanel />}
           {tab === 'settings' && <SettingsPanel />}
         </main>
       </div>
