@@ -111,6 +111,8 @@ class Settings(BaseSettings):
     clarify_enabled: bool = True
     # 是否启用 CRAG（纠正性 RAG）：检索后评估质量，不足则改写查询重新检索（失败自动降级）。
     crag_enabled: bool = True
+    # CRAG 触发阈值：仅当检索最高分低于此值时评估（高分说明检索可靠，跳过评估以提速）。
+    crag_trigger_threshold: float = 0.4
 
     # ---------- 记忆 ----------
     memory_db_path: str = "./data/memory.db"

@@ -196,8 +196,13 @@ class ChatService:
                 min_score=self._settings.retrieval_min_score,
             )
 
-            # CRAG（纠正性 RAG）：评估检索质量，不充分则改写查询重检索一次
-            if self._settings.crag_enabled and sources:
+            # CRAG（纠正性 RAG）：仅在检索可疑时评估（高分说明检索可靠，跳过评估提速）
+            crag_should_eval = (
+                self._settings.crag_enabled
+                and sources
+                and max(c.score for c in sources) < self._settings.crag_trigger_threshold
+            )
+            if crag_should_eval:
                 try:
                     eval_result = await RetrievalEvaluator.evaluate(
                         llm, retrieval_query, self._retriever.build_context(sources)
