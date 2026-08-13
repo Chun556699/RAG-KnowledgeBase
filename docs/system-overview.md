@@ -96,11 +96,12 @@
 
 **数据流**
 ```
-文档 → loader(多格式解析) → splitter(递归分块) → embedder → VectorStore(numpy)
-查询 → embedder → 向量召回 candidate_k → Reranker 精排 top_n → build_context → LLM
+文档 → loader(多格式解析) → splitter(递归分块) → embedder → VectorStore(numpy) + BM25Index
+查询 → 向量召回 + BM25 稀疏召回 → RRF 融合 → Reranker 精排 top_n → build_context → LLM
 ```
 
 - **嵌入-存储解耦**：`BaseEmbedder` 抽象 + `create_embedder` 工厂；`MockEmbedder`（哈希词袋 + L2 归一化，离线兜底，384 维）与 `OpenAICompatibleEmbedder`（真实语义，bge-m3，1024 维，服务端返回维度后回写）可插拔。
+- **混合检索**：`BM25Index`（中文单字 + bigram 分词，零依赖）与向量检索并行召回，`Retriever._rrf_fuse` 做加权 RRF（Reciprocal Rank Fusion）融合，两路权重可配置（`hybrid_dense_weight` / `hybrid_sparse_weight`），专有名词 / 精确匹配召回显著提升。
 - **两阶段检索**：`enabled` 为真时先向量召回 `candidate_k`（默认 20）候选，再由 `SiliconFlowReranker` 调用 OpenAI 兼容 `/rerank` 精排至 `top_n`，最后按 `min_score` 过滤；重排 `try/except` **失败自动降级**为向量结果。
 - **本地向量库**：numpy 计算 cosine 相似度，支持元数据（`document_id` 等）过滤、按文档删除、JSON 单文件持久化；嵌入与存储解耦（写入预计算向量）。
 - **递归分块**：按 `\n\n → \n → 句号 …` 逐级切分，`chunk_size=500 / overlap=50`，避免语义断裂。
@@ -150,12 +151,13 @@ long_term  长期记忆(key, value, topic, importance, expires_at) + idx_long_te
 
 ```
 全量片段 → round-robin 均衡采样 → asyncio 并发 LLM 抽取三元组
-        → 聚合去重(节点/边加权) → 持久化 → cytoscape 可视化
+        → 聚合去重(节点/边加权) → 持久化 → cytoscape 可视化 + 图增强检索(GraphRAG)
 ```
 
 - **并发限流**：`asyncio.Semaphore(graph_extract_concurrency)`（默认 4）限制 LLM 并发，`asyncio.gather` 批量抽取「实体-关系-实体」；**单片段失败不阻断**整体。
 - **均衡采样**：按 `document_id` 分桶后 round-robin 轮流取片段，避免大文档垄断，`graph_max_chunks` 控成本（默认 40）。
 - **聚合去重加权**：实体归一化为 key 去重、重复累加节点 `weight`（热度）；`(source, target, relation)` 唯一化边并累加权重（关系强度）。
+- **图增强检索（GraphRAG）**：`GraphSearcher` 将图谱纳入问答检索——查询匹配实体 → 沿边邻居扩展（1 跳）→ 返回相关三元组；ChatService 将图谱三元组与文档片段合并注入提示词，捕捉间接关联与多跳语义。
 - **稳定输出**：抽取 `temperature=0.0`，`extract_json` 容错，非法项跳过。
 
 ### 6.6 运行时配置层与脱密（`core/config_store`）
