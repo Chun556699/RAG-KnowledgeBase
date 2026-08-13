@@ -103,6 +103,7 @@
 - **嵌入-存储解耦**：`BaseEmbedder` 抽象 + `create_embedder` 工厂；`MockEmbedder`（哈希词袋 + L2 归一化，离线兜底，384 维）与 `OpenAICompatibleEmbedder`（真实语义，bge-m3，1024 维，服务端返回维度后回写）可插拔。
 - **混合检索**：`BM25Index`（中文单字 + bigram 分词，零依赖）与向量检索并行召回，`Retriever._rrf_fuse` 做加权 RRF（Reciprocal Rank Fusion）融合，两路权重可配置（`hybrid_dense_weight` / `hybrid_sparse_weight`），专有名词 / 精确匹配召回显著提升。
 - **两阶段检索**：`enabled` 为真时先向量召回 `candidate_k`（默认 20）候选，再由 `SiliconFlowReranker` 调用 OpenAI 兼容 `/rerank` 精排至 `top_n`，最后按 `min_score` 过滤；重排 `try/except` **失败自动降级**为向量结果。
+- **CRAG 纠正性检索**：`RetrievalEvaluator`（`core/rag/evaluator.py`）用 LLM 评估检索结果是否足以回答；不充分时生成更优查询并重检索一次，仍不足则如实回退——先评估、再纠正，避免把跑偏的上下文交给生成模型。
 - **本地向量库**：numpy 计算 cosine 相似度，支持元数据（`document_id` 等）过滤、按文档删除、JSON 单文件持久化；嵌入与存储解耦（写入预计算向量）。
 - **递归分块**：按 `\n\n → \n → 句号 …` 逐级切分，`chunk_size=500 / overlap=50`，避免语义断裂。
 - **健壮性**：`retrieval_min_score` 过滤噪音、命中为空如实回退不编造；支持多轮追问的**查询改写**与问题模糊时的**反问澄清**（均可降级）。
@@ -165,6 +166,13 @@ long_term  长期记忆(key, value, topic, importance, expires_at) + idx_long_te
 - **分层配置**：`data/runtime_config.json`（网页可改覆盖层）叠加只读 `.env`（基线），覆盖层非空字段生效，作凭据**单一事实来源**。
 - **脱密保护**：对外快照只返回掩码密钥（`sk-a****wxyz`）；更新时「空值 / 掩码值视为不修改」，避免回填掩码误清真实密钥；密钥永不出网页。
 - **热重载**：`RLock` + 原子落盘（临时文件替换）+ `revision` 自增；`reload_llm / reload_reranker / reload_embedding` 热替换实现，**无需重启**。
+
+### 6.7 质量评估（`core/evaluation`）
+
+- **RAGAS 风格指标**：`RagasEvaluator` 提供**忠实度**（faithfulness，回答是否忠于上下文、无编造）与**答案相关性**（answer_relevancy，是否切题）两个 LLM 打分指标（0~1）。
+- **评估端点**：`POST /api/evaluation` 输入问题 / 回答 / 上下文，返回两项分数；前端「质量评估」面板可视化展示。
+- **离线回归**：`docs/evaluation.md` 记录 8 例真实语料回归——知识库内 5 例双满分、知识库外 3 例零编造。
+- **健壮降级**：评估 LLM 调用 / JSON 解析失败时返回 0.0，不阻断主流程。
 
 ---
 
