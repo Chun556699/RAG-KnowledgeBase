@@ -263,7 +263,7 @@ class KnowledgeGraphBuilder:
             self._persist(graph)
             return graph
 
-        provider_name = provider or self._settings.default_llm_provider
+        provider_name = provider or self._llm_factory.default_provider_name()
         llm = self._llm_factory.get_provider(provider_name, model)
         sem = asyncio.Semaphore(max(1, self._settings.graph_extract_concurrency))
 

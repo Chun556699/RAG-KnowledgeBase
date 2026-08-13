@@ -82,3 +82,20 @@ def test_factory_available_reflects_api_key():
     models = {m["provider"]: m for m in factory.available_models()}
     assert models["deepseek"]["available"] is True
     assert models["mimo"]["available"] is True
+
+
+def test_factory_default_provider_name_uses_runtime_config():
+    """default_provider_name 应优先返回运行时配置（config_store）的默认值。"""
+
+    class _FakeStore:
+        def default_provider(self) -> str:
+            return "mimo"
+
+    factory = LLMFactory(get_settings(), config_store=_FakeStore())
+    assert factory.default_provider_name() == "mimo"
+
+
+def test_factory_default_provider_name_falls_back_to_env():
+    """无运行时配置时，default_provider_name 应回落到 .env 默认值。"""
+    factory = LLMFactory(Settings(default_llm_provider="deepseek"))
+    assert factory.default_provider_name() == "deepseek"

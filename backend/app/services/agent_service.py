@@ -48,7 +48,7 @@ class AgentService:
         Returns:
             AgentResult: 规划、执行、汇总、反思的完整结果。
         """
-        provider_name = provider or self._settings.default_llm_provider
+        provider_name = provider or self._llm_factory.default_provider_name()
         llm = self._llm_factory.get_provider(provider_name, model)
         executor = AgentExecutor(llm, self._tools)
         logger.info("Agent 开始处理: %s", query[:40])

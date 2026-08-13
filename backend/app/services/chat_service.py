@@ -232,7 +232,7 @@ class ChatService:
         Returns:
             Tuple[str, ChatContext]: (回答文本, 上下文含来源与会话信息)。
         """
-        provider_name = provider or self._settings.default_llm_provider
+        provider_name = provider or self._llm_factory.default_provider_name()
         llm = self._llm_factory.get_provider(provider_name, model)
 
         ctx = await self._prepare_context(llm, message, session_id, use_rag, top_k)
@@ -283,7 +283,7 @@ class ChatService:
                 (文本增量异步迭代器, 上下文)。迭代器耗尽后回答会自动写入记忆。
                 若 ctx.clarify 不为空，则本次为反问澄清，迭代器不产出正文。
         """
-        provider_name = provider or self._settings.default_llm_provider
+        provider_name = provider or self._llm_factory.default_provider_name()
         llm = self._llm_factory.get_provider(provider_name, model)
 
         ctx = await self._prepare_context(llm, message, session_id, use_rag, top_k)

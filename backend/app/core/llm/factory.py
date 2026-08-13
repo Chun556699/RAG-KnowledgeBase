@@ -105,11 +105,15 @@ class LLMFactory:
         self._cache[cache_key] = instance
         return instance
 
+    def default_provider_name(self) -> str:
+        """获取默认提供商名称（运行时配置优先，回落到 .env）。"""
+        if self._store is not None:
+            return self._store.default_provider()
+        return self._settings.default_llm_provider
+
     def get_default(self) -> BaseLLMProvider:
         """获取默认提供商实例（运行时配置优先，回落到 .env）。"""
-        if self._store is not None:
-            return self.get_provider(self._store.default_provider())
-        return self.get_provider(self._settings.default_llm_provider)
+        return self.get_provider(self.default_provider_name())
 
     def available_models(self) -> List[dict]:
         """

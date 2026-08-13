@@ -11,7 +11,9 @@ Agent 工具模块。
 from __future__ import annotations
 
 import abc
+import ast
 import datetime
+import operator
 from typing import Callable, Dict, List, Optional
 
 from app.utils.logger import get_logger
@@ -51,16 +53,42 @@ class CalculatorTool(BaseTool):
     _ALLOWED = set("0123456789+-*/(). ")
 
     def run(self, query: str) -> str:
-        """对算术表达式求值（经字符白名单校验，杜绝代码注入）。"""
+        """对算术表达式求值（AST 白名单节点，杜绝任意代码执行）。"""
         expr = query.strip()
         if not expr or not set(expr).issubset(self._ALLOWED):
             return f"无法计算：表达式含非法字符 -> {query}"
         try:
-            # 限制内置命名空间，进一步降低风险
-            result = eval(expr, {"__builtins__": {}}, {})  # noqa: S307 已做白名单校验
+            result = self._safe_eval(expr)
             return f"计算结果：{expr} = {result}"
         except Exception as exc:  # noqa: BLE001
             return f"计算失败：{exc}"
+
+    @staticmethod
+    def _safe_eval(expr: str) -> float:
+        """用 AST 白名单求值四则运算表达式，杜绝 eval 的代码注入风险。"""
+        bin_ops = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+        }
+        unary_ops = {
+            ast.UAdd: operator.pos,
+            ast.USub: operator.neg,
+        }
+
+        def _eval(node: ast.AST):
+            if isinstance(node, ast.Expression):
+                return _eval(node.body)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                return node.value
+            if isinstance(node, ast.BinOp) and type(node.op) in bin_ops:
+                return bin_ops[type(node.op)](_eval(node.left), _eval(node.right))
+            if isinstance(node, ast.UnaryOp) and type(node.op) in unary_ops:
+                return unary_ops[type(node.op)](_eval(node.operand))
+            raise ValueError(f"不支持的表达式元素: {type(node).__name__}")
+
+        return _eval(ast.parse(expr, mode="eval"))
 
 
 class DateTimeTool(BaseTool):

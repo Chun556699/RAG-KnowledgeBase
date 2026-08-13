@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import List
 
 from fastapi import APIRouter, Depends, File, UploadFile
@@ -34,7 +35,10 @@ async def upload_document(
     支持格式：PDF / Word(.docx) / TXT / Markdown。
     """
     content = await file.read()
-    record = container.documents.add_document(file.filename or "unknown", content)
+    # 解析/分块/嵌入/落盘均为同步 CPU/IO 密集型操作，放入线程池避免阻塞事件循环
+    record = await asyncio.to_thread(
+        container.documents.add_document, file.filename or "unknown", content
+    )
     return UploadResponse(
         document=DocumentInfo(
             document_id=record.document_id,

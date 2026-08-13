@@ -106,7 +106,7 @@ async def health() -> dict:
         "status": "ok",
         "app": settings.app_name,
         "env": settings.app_env,
-        "default_provider": settings.default_llm_provider,
+        "default_provider": container.config_store.default_provider(),
         "indexed_chunks": container.retriever.count(),
     }
 
