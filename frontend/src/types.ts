@@ -11,6 +11,13 @@ export interface RetrievedChunk {
   filename: string
 }
 
+/** 图谱增强检索命中的实体关系三元组 */
+export interface GraphTriple {
+  source: string
+  relation: string
+  target: string
+}
+
 /** 文档信息 */
 export interface DocumentInfo {
   document_id: string
@@ -52,6 +59,8 @@ export interface ChatMessage {
   created_at?: number
   /** 前端专用：该条回答依据的检索来源 */
   sources?: RetrievedChunk[]
+  /** 图谱增强检索命中的实体关系三元组（GraphRAG） */
+  graph_triples?: GraphTriple[]
   /** 前端专用：若该条为反问澄清，携带候选方向供一键选择 */
   clarify?: Clarify
 }

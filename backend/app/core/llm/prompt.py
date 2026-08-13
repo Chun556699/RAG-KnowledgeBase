@@ -185,6 +185,53 @@ GRAPH_EXTRACT = PromptTemplate(
 )
 
 
+# CRAG 检索质量评估：判断检索结果是否足以回答，不足则给出更优检索查询
+RETRIEVAL_EVAL = PromptTemplate(
+    name="retrieval_eval",
+    description="CRAG 检索质量评估：判断检索资料是否足以回答，不足时给出更优检索查询",
+    template=(
+        "你是一个检索质量评估员。请判断下方检索到的资料是否足以回答用户问题。\n"
+        "评估标准：资料是否包含回答问题所需的关键信息；若资料与问题无关或关键信息缺失，则视为不充分。\n\n"
+        "用户问题：{query}\n\n"
+        "检索资料：\n{context}\n\n"
+        "请严格输出 JSON："
+        '{{"sufficient": true/false, "reason": "评估理由", '
+        '"rewritten_query": "若不充分，给出一个更可能命中相关资料的新检索查询；若充分则留空"}}。'
+        "只输出 JSON。"
+    ),
+)
+
+
+# RAGAS 忠实度评估：判断回答是否忠于检索上下文
+RAGAS_FAITHFULNESS = PromptTemplate(
+    name="ragas_faithfulness",
+    description="RAGAS 忠实度评估：判断回答是否忠于检索上下文，是否存在编造",
+    template=(
+        "你是一个 RAG 质量评估员。请评估以下回答是否忠实于给定的参考资料上下文，"
+        "即回答中的陈述是否都能在上下文中找到依据，是否存在编造（幻觉）。\n\n"
+        "用户问题：{question}\n\n"
+        "参考资料：\n{context}\n\n"
+        "回答：\n{answer}\n\n"
+        "请严格输出 JSON：{{\"score\": 0到1之间的忠实度分数, \"reason\": \"评估理由\"}}。"
+        "score 越接近 1 表示回答越忠实于上下文、无编造。只输出 JSON。"
+    ),
+)
+
+# RAGAS 答案相关性评估：判断回答是否切题
+RAGAS_ANSWER_RELEVANCY = PromptTemplate(
+    name="ragas_answer_relevancy",
+    description="RAGAS 答案相关性评估：判断回答是否直接、完整地回应问题",
+    template=(
+        "你是一个 RAG 质量评估员。请评估以下回答与用户问题的相关性，"
+        "即回答是否直接、完整地回应了问题，是否有无关内容。\n\n"
+        "用户问题：{question}\n\n"
+        "回答：\n{answer}\n\n"
+        "请严格输出 JSON：{{\"score\": 0到1之间的相关性分数, \"reason\": \"评估理由\"}}。"
+        "score 越接近 1 表示回答越切题。只输出 JSON。"
+    ),
+)
+
+
 # 内置模板注册表（只读基线：始终存在，可被用户覆盖但不可删除）
 _BUILTIN: Dict[str, PromptTemplate] = {
     t.name: t
@@ -198,6 +245,9 @@ _BUILTIN: Dict[str, PromptTemplate] = {
         AGENT_REFLECTION,
         AGENT_SYNTHESIZE,
         GRAPH_EXTRACT,
+        RETRIEVAL_EVAL,
+        RAGAS_FAITHFULNESS,
+        RAGAS_ANSWER_RELEVANCY,
     )
 }
 

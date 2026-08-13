@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import agent, chat, documents, graph, memory, models, settings as settings_api
+from app.api import agent, chat, documents, evaluation, graph, memory, models, settings as settings_api
 from app.config import get_settings
 from app.services.container import get_container, init_container, reset_container
 from app.utils.exceptions import AppException
@@ -94,6 +94,7 @@ app.include_router(agent.router)
 app.include_router(memory.router)
 app.include_router(models.router)
 app.include_router(graph.router)
+app.include_router(evaluation.router)
 app.include_router(settings_api.router)
 
 

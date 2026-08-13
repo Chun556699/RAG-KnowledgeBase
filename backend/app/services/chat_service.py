@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 from app.core.graph.search import GraphSearcher
+from app.core.rag.evaluator import RetrievalEvaluator
 from app.core.llm.base import GenerationConfig, Message, Role
 from app.core.llm.factory import LLMFactory
 from app.core.llm.prompt import get_template
@@ -194,6 +195,26 @@ class ChatService:
                 top_k=top_k,
                 min_score=self._settings.retrieval_min_score,
             )
+
+            # CRAG（纠正性 RAG）：评估检索质量，不充分则改写查询重检索一次
+            if self._settings.crag_enabled and sources:
+                try:
+                    eval_result = await RetrievalEvaluator.evaluate(
+                        llm, retrieval_query, self._retriever.build_context(sources)
+                    )
+                    if not eval_result["sufficient"] and eval_result["rewritten_query"]:
+                        logger.info("CRAG：检索不充分，改写查询重检索")
+                        new_sources = self._retriever.retrieve(
+                            eval_result["rewritten_query"],
+                            top_k=top_k,
+                            min_score=self._settings.retrieval_min_score,
+                        )
+                        if new_sources:
+                            sources = new_sources
+                            retrieval_query = eval_result["rewritten_query"]
+                except Exception as exc:  # noqa: BLE001  评估失败不阻断主流程
+                    logger.warning("CRAG 评估失败，跳过纠正: %s", exc)
+
             context = self._retriever.build_context(sources)
 
             # 图谱增强检索（GraphRAG）：提取相关实体关系三元组并合并上下文

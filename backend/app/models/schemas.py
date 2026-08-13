@@ -366,3 +366,20 @@ class ConnectionTestResult(BaseModel):
 
     ok: bool = Field(..., description="是否连通")
     message: str = Field(..., description="结果描述（成功提示或错误原因）")
+
+
+# ======================== 评估 ========================
+class EvaluationRequest(BaseModel):
+    """RAG 质量评估请求。"""
+
+    question: str = Field(..., min_length=1, description="用户问题")
+    answer: str = Field(..., min_length=1, description="系统回答")
+    context: str = Field("", description="检索上下文（忠实度评估需要）")
+    provider: Optional[str] = Field(None, description="LLM 提供商，覆盖默认值")
+
+
+class EvaluationResponse(BaseModel):
+    """RAG 质量评估结果。"""
+
+    faithfulness: float = Field(..., description="忠实度 0~1（回答是否忠于上下文、无编造）")
+    answer_relevancy: float = Field(..., description="答案相关性 0~1（回答是否切题）")

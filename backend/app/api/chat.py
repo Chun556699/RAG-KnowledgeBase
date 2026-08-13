@@ -98,6 +98,7 @@ async def chat_stream(
             "provider": ctx.provider_name,
             "model": ctx.model_name,
             "sources": [s.model_dump() for s in _sources_schema(ctx.sources)],
+            "graph_triples": ctx.graph_triples,
         }
         yield f"data: {json.dumps(meta, ensure_ascii=False)}\n\n"
 

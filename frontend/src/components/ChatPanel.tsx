@@ -9,7 +9,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { chatStream } from '../api/client'
-import type { ChatMessage, Clarify, RetrievedChunk, SelectedModel } from '../types'
+import type { ChatMessage, Clarify, GraphTriple, RetrievedChunk, SelectedModel } from '../types'
 import Icon from './Icon'
 
 interface Props {
@@ -54,7 +54,7 @@ export default function ChatPanel({ model }: Props) {
     setMessages((prev) => [
       ...prev,
       { role: 'user', content: text },
-      { role: 'assistant', content: '', sources: [] },
+      { role: 'assistant', content: '', sources: [], graph_triples: [] },
     ])
 
     // 助手消息在数组中的索引（当前最后一条）
@@ -79,6 +79,7 @@ export default function ChatPanel({ model }: Props) {
               next[assistantIndex] = {
                 ...next[assistantIndex],
                 sources: meta.sources,
+                graph_triples: meta.graph_triples,
               }
             }
             return next
@@ -155,6 +156,25 @@ export default function ChatPanel({ model }: Props) {
     )
   }
 
+  /** 渲染图谱增强检索命中的实体关系三元组（GraphRAG） */
+  const renderGraphTriples = (triples?: GraphTriple[]) => {
+    if (!triples || triples.length === 0) return null
+    return (
+      <div className="sources">
+        <div className="sources-head">
+          <Icon name="graph" size={14} /> 图谱关系（{triples.length}）
+        </div>
+        {triples.map((t, i) => (
+          <div key={i} className="source-item">
+            <span className="tag">{t.source}</span>{' '}
+            <span className="tag relation">-{t.relation}→</span>{' '}
+            <span className="tag">{t.target}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="chat-container">
       <h2 className="panel-title">智能对话</h2>
@@ -214,6 +234,7 @@ export default function ChatPanel({ model }: Props) {
                   ))}
                 </div>
               )}
+              {m.role === 'assistant' && renderGraphTriples(m.graph_triples)}
               {m.role === 'assistant' && renderSources(m.sources)}
             </div>
           </div>

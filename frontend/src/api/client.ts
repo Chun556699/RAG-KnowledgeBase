@@ -12,6 +12,7 @@ import type {
   ConnectionTestResult,
   DocumentInfo,
   GraphData,
+  GraphTriple,
   LongTermItem,
   ModelInfo,
   PromptTemplate,
@@ -230,7 +231,7 @@ export async function chatStream(
     allow_clarify?: boolean
   },
   handlers: {
-    onMeta?: (meta: { session_id: string; sources: RetrievedChunk[]; provider: string; model: string }) => void
+    onMeta?: (meta: { session_id: string; sources: RetrievedChunk[]; graph_triples: GraphTriple[]; provider: string; model: string }) => void
     onClarify?: (clarify: Clarify) => void
     onDelta?: (text: string) => void
     onDone?: () => void

@@ -109,6 +109,8 @@ class Settings(BaseSettings):
     query_rewrite_enabled: bool = True
     # 是否启用「反问澄清」：问题模糊时先反问用户再作答（需 LLM 可用，失败自动降级）。
     clarify_enabled: bool = True
+    # 是否启用 CRAG（纠正性 RAG）：检索后评估质量，不足则改写查询重新检索（失败自动降级）。
+    crag_enabled: bool = True
 
     # ---------- 记忆 ----------
     memory_db_path: str = "./data/memory.db"
