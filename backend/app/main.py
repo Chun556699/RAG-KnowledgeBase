@@ -19,8 +19,26 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import agent, chat, documents, evaluation, graph, memory, models, settings as settings_api
+from app.api import (
+    admin,
+    agent,
+    chat,
+    documents,
+    embed,
+    evaluation,
+    graph,
+    memory,
+    models,
+    settings as settings_api,
+    v1,
+)
 from app.config import get_settings
+from app.core.middleware import (
+    PublicCORSMiddleware,
+    RateLimitMiddleware,
+    RequestContextMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.services.container import get_container, init_container, reset_container
 from app.utils.exceptions import AppException
 from app.utils.logger import get_logger
@@ -56,7 +74,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ---------- 跨域中间件 ----------
+# ---------- 中间件（后添加者更靠外，先处理请求） ----------
+# 管理面 CORS：仅允许白名单源
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -64,6 +83,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# 公共面限流：仅作用于 /api/v1
+app.add_middleware(
+    RateLimitMiddleware,
+    per_minute=settings.public_rate_limit_per_minute,
+)
+# 公共面宽松 CORS：覆盖 /api/v1 与 /embed 的 ACAO 为 *
+app.add_middleware(PublicCORSMiddleware)
+# 安全响应头
+app.add_middleware(SecurityHeadersMiddleware)
+# Request-ID + 访问日志 + 指标（最外层）
+app.add_middleware(RequestContextMiddleware)
 
 
 # ---------- 全局异常处理 ----------
@@ -96,6 +126,9 @@ app.include_router(models.router)
 app.include_router(graph.router)
 app.include_router(evaluation.router)
 app.include_router(settings_api.router)
+app.include_router(admin.router)
+app.include_router(v1.router)
+app.include_router(embed.router)
 
 
 # ---------- 健康检查 ----------

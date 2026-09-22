@@ -39,6 +39,60 @@
     'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* ---------- 深色主题 ---------- */
+[data-theme='dark'] {
+  --bg: #0d1117;
+  --surface: #151b24;
+  --surface-subtle: #1c2330;
+  --border: #2a3341;
+  --border-strong: #3a4554;
+
+  --text: #e6eaf0;
+  --text-secondary: #a8b3c2;
+  --text-muted: #6b7684;
+
+  --primary: #5b8def;
+  --primary-hover: #74a2f3;
+  --primary-soft: rgba(91, 141, 239, 0.16);
+  --accent: #9d7bf5;
+  --accent-soft: rgba(157, 123, 245, 0.16);
+  --success: #34c38f;
+  --success-soft: rgba(52, 195, 143, 0.15);
+  --danger: #ef6464;
+  --danger-soft: rgba(239, 100, 100, 0.14);
+  --warning: #e3a04c;
+  --warning-soft: rgba(227, 160, 76, 0.14);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #303a49;
+  background-clip: padding-box;
+}
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #3d4859;
+  background-clip: padding-box;
+}
+
+/* 主题切换按钮 */
+.theme-toggle {
+  padding: 6px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.theme-toggle:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -810,6 +864,94 @@ select:focus {
   white-space: pre-wrap;
   color: var(--text-secondary);
   line-height: 1.6;
+}
+
+/* ---------- Markdown 渲染 ---------- */
+.markdown {
+  white-space: normal;
+}
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0 0 10px;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-size: 15.5px;
+  font-weight: 650;
+  margin: 14px 0 8px;
+  line-height: 1.4;
+}
+.markdown h1 {
+  font-size: 17px;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0 0 10px 1.2em;
+}
+.markdown li {
+  margin: 3px 0;
+}
+.markdown blockquote {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--primary);
+  background: var(--primary-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+}
+.markdown code {
+  font-family: 'Cascadia Code', 'Consolas', 'SFMono-Regular', monospace;
+  font-size: 12.5px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+.markdown pre {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 8px 0 10px;
+}
+.markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 8px 0 12px;
+  font-size: 13px;
+  width: 100%;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown th {
+  background: var(--surface-subtle);
+  font-weight: 600;
+}
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+.markdown a {
+  color: var(--primary);
 }
 
 /* ---------- 响应式 ---------- */

@@ -36,6 +36,7 @@ class DocumentInfo(BaseModel):
     chunk_count: int = Field(..., description="切分后的片段数")
     size_bytes: int = Field(..., description="文件大小（字节）")
     created_at: float = Field(..., description="上传时间戳")
+    kb_id: str = Field("default", description="所属知识库 ID")
 
 
 class UploadResponse(BaseModel):
@@ -85,6 +86,7 @@ class ChatRequest(BaseModel):
     model: Optional[str] = Field(None, description="模型名，覆盖默认值")
     use_rag: bool = Field(True, description="是否启用知识库检索增强")
     top_k: int = Field(4, ge=1, le=20, description="RAG 检索片段数")
+    kb: str = Field("default", description="目标知识库 ID（多租户隔离粒度）")
     allow_clarify: bool = Field(
         True,
         description="是否允许本轮反问澄清（用户回应澄清后应置为 false，直接作答）",
@@ -383,3 +385,84 @@ class EvaluationResponse(BaseModel):
 
     faithfulness: float = Field(..., description="忠实度 0~1（回答是否忠于上下文、无编造）")
     answer_relevancy: float = Field(..., description="答案相关性 0~1（回答是否切题）")
+
+
+# ======================== 知识库 / API 密钥（企业化） ========================
+class KnowledgeBaseSchema(BaseModel):
+    """知识库信息。"""
+
+    kb_id: str = Field(..., description="知识库 ID")
+    name: str = Field(..., description="名称")
+    description: str = Field("", description="描述")
+    created_at: float = Field(..., description="创建时间戳")
+    chunk_count: int = Field(0, description="已索引片段数")
+    document_count: int = Field(0, description="文档数")
+
+
+class KnowledgeBaseCreateRequest(BaseModel):
+    """创建知识库请求。"""
+
+    name: str = Field(..., min_length=1, max_length=64, description="知识库名称")
+    description: str = Field("", max_length=256, description="描述")
+
+
+class ApiKeySchema(BaseModel):
+    """API Key 管理视图（脱敏：只有前缀，绝无明文/散列）。"""
+
+    key_id: str = Field(..., description="密钥记录 ID")
+    name: str = Field(..., description="密钥名称/用途备注")
+    key_prefix: str = Field(..., description="密钥前缀展示（如 ak_live_ab12…）")
+    scopes: List[str] = Field(..., description="授权范围（ask / ingest / admin）")
+    kb_id: Optional[str] = Field(None, description="绑定的知识库，null 为不限定")
+    created_at: float
+    last_used_at: Optional[float] = None
+    revoked: bool = False
+
+
+class ApiKeyCreateRequest(BaseModel):
+    """创建 API Key 请求。"""
+
+    name: str = Field(..., min_length=1, max_length=64, description="密钥名称/用途")
+    scopes: List[str] = Field(
+        default_factory=lambda: ["ask"],
+        description="授权范围，可选 ask（问答）/ ingest（摄取）/ admin（管理）",
+    )
+    kb_id: Optional[str] = Field(None, description="绑定的知识库 ID，null 为不限定")
+
+
+class ApiKeyCreateResponse(BaseModel):
+    """创建 API Key 响应：明文密钥仅此一次返回，请妥善保存。"""
+
+    key: ApiKeySchema
+    raw_key: str = Field(..., description="明文密钥，仅此一次返回")
+
+
+# ======================== 公开问答 API（可嵌入） ========================
+class PublicAskRequest(BaseModel):
+    """公开问答请求（供嵌入挂件 / 第三方产品调用）。"""
+
+    question: str = Field(..., min_length=1, max_length=4000, description="用户问题")
+    session_id: Optional[str] = Field(
+        None, description="会话 ID（挂件端自动维护，用于多轮上下文）"
+    )
+    kb: Optional[str] = Field(
+        None, description="知识库 ID；缺省用 API Key 绑定的库，未绑定则为 default"
+    )
+    top_k: int = Field(4, ge=1, le=10, description="检索片段数")
+
+
+class PublicAskResponse(BaseModel):
+    """公开问答响应。"""
+
+    session_id: str
+    answer: str
+    sources: List[RetrievedChunkSchema] = Field(default_factory=list)
+    kb_id: str = Field(..., description="实际使用的知识库")
+
+
+class EmbedConfigResponse(BaseModel):
+    """挂件嵌入配置（供前端生成嵌入代码用）。"""
+
+    api_url: str = Field(..., description="后端 API 基址（由请求推导）")
+    widget_url: str = Field(..., description="widget.js 托管地址")
+    kb_options: List[KnowledgeBaseSchema] = Field(default_factory=list)

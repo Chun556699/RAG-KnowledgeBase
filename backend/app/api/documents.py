@@ -2,14 +2,14 @@
 文档管理 API 路由（RAG）。
 
 提供文档上传、列表、删除，以及独立的语义检索接口。
+上传支持 ``kb`` 表单字段将文档归属到指定知识库（多租户隔离）。
 """
 
 from __future__ import annotations
 
-import asyncio
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.models.schemas import (
     DocumentInfo,
@@ -24,9 +24,22 @@ from app.services.container import Container, get_container
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
+def _to_schema(record) -> DocumentInfo:
+    """DocumentRecord → 响应 Schema。"""
+    return DocumentInfo(
+        document_id=record.document_id,
+        filename=record.filename,
+        chunk_count=record.chunk_count,
+        size_bytes=record.size_bytes,
+        created_at=record.created_at,
+        kb_id=record.kb_id,
+    )
+
+
 @router.post("/upload", response_model=UploadResponse, summary="上传并索引文档")
 async def upload_document(
     file: UploadFile = File(..., description="待上传的文档文件"),
+    kb: str = Form("default", description="目标知识库 ID"),
     container: Container = Depends(get_container),
 ) -> UploadResponse:
     """
@@ -35,36 +48,19 @@ async def upload_document(
     支持格式：PDF / Word(.docx) / TXT / Markdown。
     """
     content = await file.read()
-    # 解析/分块/嵌入/落盘均为同步 CPU/IO 密集型操作，放入线程池避免阻塞事件循环
-    record = await asyncio.to_thread(
-        container.documents.add_document, file.filename or "unknown", content
+    record = await container.documents.add_document(
+        file.filename or "unknown", content, kb_id=kb
     )
-    return UploadResponse(
-        document=DocumentInfo(
-            document_id=record.document_id,
-            filename=record.filename,
-            chunk_count=record.chunk_count,
-            size_bytes=record.size_bytes,
-            created_at=record.created_at,
-        )
-    )
+    return UploadResponse(document=_to_schema(record))
 
 
-@router.get("", response_model=List[DocumentInfo], summary="列出全部文档")
+@router.get("", response_model=List[DocumentInfo], summary="列出文档")
 async def list_documents(
+    kb: Optional[str] = None,
     container: Container = Depends(get_container),
 ) -> List[DocumentInfo]:
-    """返回知识库中已索引的全部文档。"""
-    return [
-        DocumentInfo(
-            document_id=r.document_id,
-            filename=r.filename,
-            chunk_count=r.chunk_count,
-            size_bytes=r.size_bytes,
-            created_at=r.created_at,
-        )
-        for r in container.documents.list_documents()
-    ]
+    """返回已索引的文档；可选按知识库过滤。"""
+    return [_to_schema(r) for r in container.documents.list_documents(kb_id=kb)]
 
 
 @router.delete("/{document_id}", response_model=OkResponse, summary="删除文档")

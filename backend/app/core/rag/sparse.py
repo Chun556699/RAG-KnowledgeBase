@@ -113,13 +113,19 @@ class BM25Index:
     # ------------------------------------------------------------------
     # 检索
     # ------------------------------------------------------------------
-    def search(self, query: str, top_k: int = 10) -> List[SparseHit]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        where: Optional[Dict[str, str]] = None,
+    ) -> List[SparseHit]:
         """
         按 BM25 打分检索最相关的片段。
 
         Args:
             query: 查询文本。
             top_k: 返回条数。
+            where: 可选元数据过滤（如 {"kb_id": "default"} 限定知识库范围）。
 
         Returns:
             List[SparseHit]: 按 BM25 分数降序、且分数 > 0 的命中列表。
@@ -132,6 +138,8 @@ class BM25Index:
 
         scored: List[SparseHit] = []
         for cid, doc in self._docs.items():
+            if where and any(doc["metadata"].get(k) != v for k, v in where.items()):
+                continue
             tf: Dict[str, int] = {}
             for t in doc["tokens"]:
                 tf[t] = tf.get(t, 0) + 1

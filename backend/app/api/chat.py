@@ -53,6 +53,7 @@ async def chat(
         use_rag=req.use_rag,
         top_k=req.top_k,
         allow_clarify=req.allow_clarify,
+        kb_id=req.kb,
     )
     return ChatResponse(
         session_id=ctx.session_id,
@@ -87,6 +88,7 @@ async def chat_stream(
         use_rag=req.use_rag,
         top_k=req.top_k,
         allow_clarify=req.allow_clarify,
+        kb_id=req.kb,
     )
 
     async def event_stream():

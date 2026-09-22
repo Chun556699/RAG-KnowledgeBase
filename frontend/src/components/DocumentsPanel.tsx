@@ -8,11 +8,14 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
-import type { DocumentInfo, RetrievedChunk } from '../types'
+import type { DocumentInfo, KnowledgeBase, RetrievedChunk } from '../types'
 import Icon from './Icon'
 
 export default function DocumentsPanel() {
   const [docs, setDocs] = useState<DocumentInfo[]>([])
+  const [kbs, setKbs] = useState<KnowledgeBase[]>([])
+  // 当前查看/上传的目标知识库；空串 = 全部（仅列表）
+  const [kb, setKb] = useState('default')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -23,11 +26,11 @@ export default function DocumentsPanel() {
   const [results, setResults] = useState<RetrievedChunk[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  /** 拉取文档列表 */
+  /** 拉取文档列表（随知识库过滤） */
   const refresh = async () => {
     setLoading(true)
     try {
-      setDocs(await api.listDocuments())
+      setDocs(await api.listDocuments(kb || undefined))
     } catch (e) {
       setError((e as ApiError).message)
     } finally {
@@ -36,8 +39,16 @@ export default function DocumentsPanel() {
   }
 
   useEffect(() => {
-    refresh()
+    api
+      .listKbs()
+      .then(setKbs)
+      .catch(() => setKbs([]))
   }, [])
+
+  useEffect(() => {
+    refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kb])
 
   /** 上传单个文件 */
   const upload = async (file: File) => {
@@ -45,7 +56,7 @@ export default function DocumentsPanel() {
     setError('')
     setNotice('')
     try {
-      const doc = await api.uploadDocument(file)
+      const doc = await api.uploadDocument(file, kb || 'default')
       setNotice(`已上传《${doc.filename}》，切分为 ${doc.chunk_count} 个片段并完成向量化。`)
       await refresh()
     } catch (e) {
@@ -186,6 +197,19 @@ export default function DocumentsPanel() {
       {/* 文档列表 */}
       <div className="toolbar">
         <strong>已入库文档（{docs.length}）</strong>
+        <select
+          className="model-select"
+          style={{ width: 'auto', padding: '5px 10px' }}
+          value={kb}
+          onChange={(e) => setKb(e.target.value)}
+        >
+          <option value="">全部知识库</option>
+          {kbs.map((k) => (
+            <option key={k.kb_id} value={k.kb_id}>
+              {k.name}
+            </option>
+          ))}
+        </select>
         <button className="btn-ghost" onClick={refresh} disabled={loading}>
           <Icon name="refresh" size={15} /> {loading ? '刷新中…' : '刷新'}
         </button>
@@ -203,6 +227,11 @@ export default function DocumentsPanel() {
                 <div className="meta">
                   {d.chunk_count} 个片段 · {fmtSize(d.size_bytes)} ·{' '}
                   {new Date(d.created_at * 1000).toLocaleString()}
+                  {d.kb_id && d.kb_id !== 'default' && (
+                    <span className="tag" style={{ marginLeft: 6 }}>
+                      {d.kb_id}
+                    </span>
+                  )}
                 </div>
               </div>
               <button className="btn-danger" onClick={() => remove(d.document_id)}>

@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
 from app.core.graph.builder import KnowledgeGraph
 from app.utils.logger import get_logger

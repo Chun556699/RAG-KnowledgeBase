@@ -8,8 +8,17 @@
  *  - 维护多轮会话上下文（session_id 由后端下发后固定）。
  */
 import { useEffect, useRef, useState } from 'react'
-import { chatStream } from '../api/client'
-import type { ChatMessage, Clarify, GraphTriple, RetrievedChunk, SelectedModel } from '../types'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { api, chatStream } from '../api/client'
+import type {
+  ChatMessage,
+  Clarify,
+  GraphTriple,
+  KnowledgeBase,
+  RetrievedChunk,
+  SelectedModel,
+} from '../types'
 import Icon from './Icon'
 
 interface Props {
@@ -24,6 +33,16 @@ export default function ChatPanel({ model }: Props) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [sessionId, setSessionId] = useState<string | undefined>(undefined)
+  // 多租户：当前对话命中的知识库（default 为内置库）
+  const [kb, setKb] = useState('default')
+  const [kbs, setKbs] = useState<KnowledgeBase[]>([])
+
+  useEffect(() => {
+    api
+      .listKbs()
+      .then(setKbs)
+      .catch(() => setKbs([]))
+  }, [])
   // 待澄清标记：上一条助手回复为反问时置位，使下一轮回应直接作答、不再重复反问
   const [clarifyPending, setClarifyPending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -68,6 +87,7 @@ export default function ChatPanel({ model }: Props) {
         model: model?.model,
         use_rag: useRag,
         allow_clarify: allowClarify,
+        kb,
       },
       {
         // 元信息：固定会话 ID，并把来源挂到助手消息上
@@ -219,7 +239,19 @@ export default function ChatPanel({ model }: Props) {
                   <Icon name="help" size={13} /> 需要你补充一下
                 </div>
               )}
-              {m.content || (sending && i === messages.length - 1 ? <span className="spinner" /> : '')}
+              {m.content ? (
+                m.role === 'assistant' ? (
+                  <div className="markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  m.content
+                )
+              ) : sending && i === messages.length - 1 ? (
+                <span className="spinner" />
+              ) : (
+                ''
+              )}
               {m.role === 'assistant' && m.clarify && m.clarify.options.length > 0 && (
                 <div className="clarify-options">
                   {m.clarify.options.map((opt, k) => (
@@ -253,6 +285,23 @@ export default function ChatPanel({ model }: Props) {
             />
             启用知识库检索（RAG）
           </label>
+          {useRag && kbs.length > 1 && (
+            <label>
+              知识库：
+              <select
+                className="model-select"
+                style={{ width: 'auto', padding: '4px 8px' }}
+                value={kb}
+                onChange={(e) => setKb(e.target.value)}
+              >
+                {kbs.map((k) => (
+                  <option key={k.kb_id} value={k.kb_id}>
+                    {k.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {sessionId && <span className="tag">会话：{sessionId.slice(0, 8)}</span>}
         </div>
         <div className="chat-input-row">

@@ -41,18 +41,27 @@ class FakeVectorStore:
 
     def __init__(self) -> None:
         self._embedder = MockEmbedder(dimension=128)
+        self._version = 0
         # chunk_id -> (text, vector, metadata)
         self._data: Dict[str, tuple] = {}
+
+    @property
+    def version(self) -> int:
+        """数据版本号：每次写入递增（与真实向量库语义一致）。"""
+        return self._version
 
     def add_chunks(
         self,
         chunk_ids: List[str],
         texts: List[str],
         metadatas: List[Dict[str, str]],
+        embed_texts: Optional[List[str]] = None,
     ) -> None:
-        vectors = self._embedder.embed_documents(texts)
+        embed_input = embed_texts if embed_texts is not None else texts
+        vectors = self._embedder.embed_documents(embed_input)
         for cid, text, vec, meta in zip(chunk_ids, texts, vectors, metadatas):
             self._data[cid] = (text, vec, meta)
+        self._version += 1
 
     def query(
         self,
@@ -77,9 +86,33 @@ class FakeVectorStore:
             for cid, v in self._data.items()
             if v[2].get("document_id") != document_id
         }
+        self._version += 1
 
-    def count(self) -> int:
-        return len(self._data)
+    def count(self, where: Optional[Dict[str, str]] = None) -> int:
+        if not where:
+            return len(self._data)
+        return sum(
+            1
+            for _, (_, _, meta) in self._data.items()
+            if all(meta.get(k) == v for k, v in where.items())
+        )
+
+    def all_chunks(self, where: Optional[Dict[str, str]] = None) -> List[RetrievedChunk]:
+        out = []
+        for cid, (text, vec, meta) in self._data.items():
+            if where and any(meta.get(k) != v for k, v in where.items()):
+                continue
+            out.append(RetrievedChunk(chunk_id=cid, text=text, score=1.0, metadata=meta))
+        return out
+
+    def get_embeddings(self, chunk_ids: List[str]) -> List[Optional[List[float]]]:
+        return [self._data[cid][1] if cid in self._data else None for cid in chunk_ids]
+
+    def get_query_embedding(self, text: str) -> List[float]:
+        return self._embedder.embed_query(text)
+
+    def close(self) -> None:
+        pass
 
 
 @pytest.fixture

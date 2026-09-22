@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 
@@ -38,6 +39,8 @@ class ChatContext:
     provider_name: str
     model_name: str
     used_rag_context: bool = False
+    # 实际检索命中所在的知识库
+    kb_id: str = "default"
     # 若本次判定为反问澄清，则为 {"question": str, "options": List[str]}；否则 None
     clarify: Optional[Dict] = None
     # 图谱增强检索命中的实体关系三元组（GraphRAG）
@@ -151,6 +154,27 @@ class ChatService:
             logger.warning("澄清判断失败，跳过: %s", exc)
         return None
 
+    async def _hyde_expand(self, llm, question: str) -> Optional[str]:
+        """
+        HyDE 查询扩展：让 LLM 生成一段「假设性回答」，用其嵌入做稠密检索。
+
+        假设文档与真实答案在向量空间更接近，可召回原始问题查不到的片段。
+        失败返回 None（降级为原查询），不阻断主流程。
+        """
+        try:
+            prompt = get_template("hyde").render(question=question)
+            resp = await llm.generate(
+                [Message(Role.USER, prompt)],
+                GenerationConfig(temperature=0.7, max_tokens=256),
+            )
+            hypo = (resp.content or "").strip()
+            if hypo:
+                logger.info("HyDE 扩展: '%s' -> 假设文档 %d 字", question[:30], len(hypo))
+            return hypo or None
+        except Exception as exc:  # noqa: BLE001 扩展失败降级为原查询
+            logger.warning("HyDE 查询扩展失败，使用原始查询: %s", exc)
+            return None
+
     async def _prepare_context(
         self,
         llm,
@@ -158,6 +182,7 @@ class ChatService:
         session_id: Optional[str],
         use_rag: bool,
         top_k: int,
+        kb_id: str = "default",
     ) -> ChatContext:
         """
         组装一次对话所需的完整消息列表与检索来源。
@@ -180,7 +205,7 @@ class ChatService:
 
         history = self._memory.get_history(session_id)
 
-        # 2) RAG 检索（含多轮查询改写与相关性阈值过滤）
+        # 2) RAG 检索（含多轮查询改写、可选 HyDE 扩展、知识库隔离与阈值过滤）
         sources: List[RetrievedChunk] = []
         graph_triples: List[Dict] = []
         messages: List[Message] = []
@@ -190,10 +215,21 @@ class ChatService:
             retrieval_query = message
             if self._settings.query_rewrite_enabled and history:
                 retrieval_query = await self._rewrite_query(llm, message, history)
-            sources = self._retriever.retrieve(
+
+            # HyDE 查询扩展：生成假设性文档作为稠密检索的嵌入输入
+            dense_query: Optional[str] = None
+            if self._settings.hyde_enabled:
+                dense_query = await self._hyde_expand(llm, retrieval_query)
+
+            # 检索为同步 CPU/网络操作，放入线程池避免阻塞事件循环
+            sources = await asyncio.to_thread(
+                self._retriever.retrieve,
                 retrieval_query,
-                top_k=top_k,
-                min_score=self._settings.retrieval_min_score,
+                top_k,
+                None,
+                self._settings.retrieval_min_score,
+                kb_id,
+                dense_query,
             )
 
             # CRAG（纠正性 RAG）：仅在检索可疑时评估（高分说明检索可靠，跳过评估提速）
@@ -209,10 +245,14 @@ class ChatService:
                     )
                     if not eval_result["sufficient"] and eval_result["rewritten_query"]:
                         logger.info("CRAG：检索不充分，改写查询重检索")
-                        new_sources = self._retriever.retrieve(
+                        new_sources = await asyncio.to_thread(
+                            self._retriever.retrieve,
                             eval_result["rewritten_query"],
-                            top_k=top_k,
-                            min_score=self._settings.retrieval_min_score,
+                            top_k,
+                            None,
+                            self._settings.retrieval_min_score,
+                            kb_id,
+                            None,
                         )
                         if new_sources:
                             sources = new_sources
@@ -224,7 +264,9 @@ class ChatService:
 
             # 图谱增强检索（GraphRAG）：提取相关实体关系三元组并合并上下文
             if self._graph_searcher is not None:
-                graph_triples = self._graph_searcher.search(retrieval_query)
+                graph_triples = await asyncio.to_thread(
+                    self._graph_searcher.search, retrieval_query
+                )
                 graph_context = GraphSearcher.build_context(graph_triples)
                 if graph_context:
                     context = f"{context}\n\n{graph_context}" if context else graph_context
@@ -255,6 +297,7 @@ class ChatService:
             model_name="",
             used_rag_context=used_rag_context,
             graph_triples=graph_triples,
+            kb_id=kb_id,
         )
 
     async def chat(
@@ -266,6 +309,7 @@ class ChatService:
         use_rag: bool = True,
         top_k: int = 4,
         allow_clarify: bool = True,
+        kb_id: str = "default",
     ) -> Tuple[str, ChatContext]:
         """
         一次性对话生成。
@@ -276,7 +320,9 @@ class ChatService:
         provider_name = provider or self._llm_factory.default_provider_name()
         llm = self._llm_factory.get_provider(provider_name, model)
 
-        ctx = await self._prepare_context(llm, message, session_id, use_rag, top_k)
+        ctx = await self._prepare_context(
+            llm, message, session_id, use_rag, top_k, kb_id
+        )
         ctx.provider_name = llm.name
         ctx.model_name = llm.model
 
@@ -315,6 +361,7 @@ class ChatService:
         use_rag: bool = True,
         top_k: int = 4,
         allow_clarify: bool = True,
+        kb_id: str = "default",
     ) -> Tuple[AsyncIterator[str], ChatContext]:
         """
         流式对话生成。
@@ -327,7 +374,9 @@ class ChatService:
         provider_name = provider or self._llm_factory.default_provider_name()
         llm = self._llm_factory.get_provider(provider_name, model)
 
-        ctx = await self._prepare_context(llm, message, session_id, use_rag, top_k)
+        ctx = await self._prepare_context(
+            llm, message, session_id, use_rag, top_k, kb_id
+        )
         ctx.provider_name = llm.name
         ctx.model_name = llm.model
 
