@@ -15,7 +15,6 @@ import {
   ConfigProvider,
   Layout,
   Menu,
-  Spin,
   theme as antdTheme,
   Tooltip,
 } from 'antd'
@@ -37,6 +36,8 @@ import { api } from './api/client'
 import type { SelectedModel } from './types'
 import ModelSelector from './components/ModelSelector'
 import ChatPanel from './components/ChatPanel'
+import { FlipText } from '@/components/block/flip-text'
+import { RipplePulseLoader } from '@/components/ui/ripple-pulse-loader'
 
 // 各功能面板按需加载（antd 组件体量较大，懒加载显著降低首屏开销）
 const DocumentsPanel = lazy(() => import('./components/DocumentsPanel'))
@@ -134,7 +135,7 @@ function Shell() {
               WebkitTextFillColor: 'transparent',
             }}
           >
-            超级知识库平台
+            <FlipText duration={1.8}>超级知识库平台</FlipText>
           </div>
           <div style={{ fontSize: 11.5, color: token.colorTextTertiary, marginTop: 3 }}>
             RAG · 智能体 · 记忆管理
@@ -201,8 +202,8 @@ function Shell() {
       <Layout.Content style={{ overflowY: 'auto', padding: '28px 32px' }}>
         <Suspense
           fallback={
-            <div style={{ textAlign: 'center', padding: 60 }}>
-              <Spin size="large" />
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
+              <RipplePulseLoader size={120} />
             </div>
           }
         >

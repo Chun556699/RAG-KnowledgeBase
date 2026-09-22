@@ -7,8 +7,9 @@
  */
 import { useState } from 'react'
 import { App, Button, Card, Col, Input, Progress, Row, Space } from 'antd'
-import { ExperimentOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { ExperimentOutlined } from '@ant-design/icons'
 import { api } from '../api/client'
+import { ArrowFillButton } from '@/components/block/arrow-fill-button'
 import type { EvaluationResponse } from '../types'
 
 /** 演示用预设样例 */
@@ -105,14 +106,20 @@ export default function EvaluationPanel() {
                 />
               </div>
               <Space>
-                <Button
-                  type="primary"
-                  icon={<ThunderboltOutlined />}
+                <ArrowFillButton
+                  as="button"
                   onClick={runEval}
-                  loading={loading}
+                  disabled={loading}
+                  bgColor="var(--primary)"
+                  textColor="#ffffff"
+                  fillBgColor="var(--surface)"
+                  fillTextColor="var(--primary)"
+                  hoverFillBgColor="var(--accent)"
+                  hoverFillTextColor="#ffffff"
+                  style={{ opacity: loading ? 0.6 : 1 }}
                 >
-                  {loading ? '评估中' : '开始评估'}
-                </Button>
+                  {loading ? '评估中…' : '开始评估'}
+                </ArrowFillButton>
                 <Button onClick={fillSample} disabled={loading}>
                   填入示例
                 </Button>

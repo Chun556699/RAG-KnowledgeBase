@@ -10,17 +10,19 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Alert, Button, Checkbox, Select, Spin, Tag, theme, Tooltip } from 'antd'
+import { Alert, Checkbox, Select, Spin, Tag, theme, Tooltip } from 'antd'
 import {
   ApiOutlined,
   LinkOutlined,
   PartitionOutlined,
   QuestionCircleOutlined,
   RobotOutlined,
-  SendOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { api, chatStream } from '../api/client'
+import { DottedGrid } from '@/components/block/dotted-grid'
+import { FlipText } from '@/components/block/flip-text'
+import { InteractiveHoverButton } from '@/components/block/interactive-hover-button'
 import type {
   ChatMessage,
   Clarify,
@@ -220,10 +222,18 @@ export default function ChatPanel({ model }: Props) {
       <div className="messages">
         {messages.length === 0 && (
           <div className="chat-empty">
+            <div className="chat-empty-bg">
+              <DottedGrid style={{ width: '100%', height: '100%' }} />
+            </div>
+            <div className="chat-empty-inner">
             <div className="chat-empty-icon">
               <ApiOutlined style={{ fontSize: 30 }} />
             </div>
-            <div className="chat-empty-title">开始一段对话</div>
+            <div className="chat-empty-title">
+              <FlipText className="flip-always" duration={2.6}>
+                开始一段对话
+              </FlipText>
+            </div>
             <div className="chat-empty-desc">
               开启“知识库检索”后，回答会引用你上传的文档内容。试试下面的问题：
             </div>
@@ -233,6 +243,7 @@ export default function ChatPanel({ model }: Props) {
                   {s}
                 </button>
               ))}
+            </div>
             </div>
           </div>
         )}
@@ -314,15 +325,13 @@ export default function ChatPanel({ model }: Props) {
             placeholder="输入你的问题，Enter 发送，Shift+Enter 换行…"
             disabled={sending}
           />
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
+          <InteractiveHoverButton
             onClick={() => send()}
             disabled={sending || !input.trim()}
-            loading={sending}
+            className={sending ? 'opacity-60 cursor-not-allowed' : ''}
           >
             {sending ? '生成中' : '发送'}
-          </Button>
+          </InteractiveHoverButton>
         </div>
       </div>
     </div>

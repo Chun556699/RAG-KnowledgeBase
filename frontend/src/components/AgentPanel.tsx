@@ -8,7 +8,7 @@
  * 左侧列出可用工具，右侧以时间线形式呈现完整执行轨迹。
  */
 import { useEffect, useState } from 'react'
-import { App, Button, Card, Col, Empty, Input, Row, Space, Spin, Tag } from 'antd'
+import { App, Card, Col, Empty, Input, Row, Space, Spin, Tag } from 'antd'
 import {
   ApartmentOutlined,
   CheckCircleOutlined,
@@ -17,6 +17,7 @@ import {
   ToolOutlined,
 } from '@ant-design/icons'
 import { api, ApiError } from '../api/client'
+import { ArrowFillButton } from '@/components/block/arrow-fill-button'
 import type { AgentResponse, SelectedModel } from '../types'
 
 interface Props {
@@ -78,16 +79,22 @@ export default function AgentPanel({ model }: Props) {
               placeholder="描述一个需要多步骤或工具协作的任务…"
               disabled={running}
             />
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={run}
-              disabled={running || !query.trim()}
-              loading={running}
-              style={{ marginTop: 10 }}
-            >
-              {running ? '执行中' : '运行 Agent'}
-            </Button>
+            <div style={{ marginTop: 12 }}>
+              <ArrowFillButton
+                as="button"
+                onClick={run}
+                disabled={running || !query.trim()}
+                bgColor="var(--primary)"
+                textColor="#ffffff"
+                fillBgColor="var(--surface)"
+                fillTextColor="var(--primary)"
+                hoverFillBgColor="var(--accent)"
+                hoverFillTextColor="#ffffff"
+                style={{ opacity: running || !query.trim() ? 0.55 : 1 }}
+              >
+                {running ? '执行中…' : '运行 Agent'}
+              </ArrowFillButton>
+            </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>示例：</div>
             <Space wrap style={{ marginTop: 6 }}>
               {examples.map((ex, i) => (

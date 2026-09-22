@@ -1,6 +1,31 @@
+@import 'tailwindcss';
+@import './components/block/arrow-fill-button.css';
+
+/* ObsidianUI/shadcn 约定：dark: 变体绑定到应用既有的 data-theme 属性 */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* 将注册表组件使用的语义色映射到本系统既有 CSS 变量，深浅主题自动联动 */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-primary: var(--primary);
+  --color-primary-foreground: #ffffff;
+  --color-muted: var(--surface-subtle);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--accent-soft);
+  --color-accent-foreground: var(--accent);
+  --color-destructive: var(--danger);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+}
+
 /* ============================================================
    全局样式 - AI 知识库平台
-   设计变量与业务定制层；通用控件样式由 Ant Design 主题接管。
+   设计变量与业务定制层；通用控件样式由 Ant Design 主题接管，
+   装饰与动效层由 ObsidianUI 组件提供。
    ============================================================ */
 
 :root {
@@ -524,4 +549,122 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ============================================================
+   ObsidianUI 装饰层伴生样式
+   ============================================================ */
+
+/* ---- flip-text：逐字 3D 翻转（hover 触发；.flip-always 持续播放） ---- */
+.flip-text-wrapper {
+  cursor: default;
+}
+.flip-char {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.flip-text-wrapper:hover .flip-char,
+.flip-text-wrapper.flip-always .flip-char {
+  animation: obsidian-flip-char var(--flip-duration, 2.2s) cubic-bezier(0.4, 0, 0.2, 1)
+    var(--flip-delay, 0s) var(--flip-iteration, infinite);
+}
+@keyframes obsidian-flip-char {
+  0% {
+    transform: rotateX(0deg);
+  }
+  32% {
+    transform: rotateX(360deg);
+  }
+  100% {
+    transform: rotateX(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flip-text-wrapper:hover .flip-char,
+  .flip-text-wrapper.flip-always .flip-char {
+    animation: none;
+  }
+}
+
+/* ---- ripple-pulse-loader：中心徽标 + 逐圈扩散的脉冲环 ---- */
+.ripple-pulse-loader {
+  position: relative;
+  width: var(--ripple-size, 150px);
+  height: var(--ripple-size, 150px);
+}
+.ripple-pulse-loader .box {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--primary);
+  opacity: 0;
+  animation: obsidian-ripple 3s cubic-bezier(0, 0.5, 0.5, 1) infinite;
+}
+.ripple-pulse-loader .box:nth-of-type(2) {
+  animation-delay: 0.75s;
+}
+.ripple-pulse-loader .box:nth-of-type(3) {
+  animation-delay: 1.5s;
+}
+.ripple-pulse-loader .box:nth-of-type(4) {
+  animation-delay: 2.25s;
+}
+.ripple-pulse-loader .box:first-of-type {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  opacity: 1;
+  animation: none;
+}
+.ripple-pulse-loader .logo {
+  width: 38%;
+  height: 38%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 28px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+.ripple-pulse-loader .logo .svg {
+  width: 52%;
+  height: 52%;
+}
+@keyframes obsidian-ripple {
+  0% {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.85;
+  }
+  80%,
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ripple-pulse-loader .box {
+    animation: none;
+  }
+}
+
+/* ---- 对话空状态：点阵画布背景 ---- */
+.chat-empty {
+  position: relative;
+}
+.chat-empty .chat-empty-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  pointer-events: none;
+}
+.chat-empty .chat-empty-inner {
+  position: relative;
+  z-index: 1;
 }

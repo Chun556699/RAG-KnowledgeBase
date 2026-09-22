@@ -11,9 +11,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Core, ElementDefinition } from 'cytoscape'
 import CytoscapeComponent from 'react-cytoscapejs'
-import { App, Button, Card, Col, Empty, Row, Space, Spin, Tag } from 'antd'
-import { PartitionOutlined, ReloadOutlined } from '@ant-design/icons'
+import { App, Card, Col, Empty, Row, Space, Spin, Tag } from 'antd'
+import { PartitionOutlined } from '@ant-design/icons'
 import { api, ApiError } from '../api/client'
+import { ArrowFillButton } from '@/components/block/arrow-fill-button'
 import type { GraphData, SelectedModel } from '../types'
 
 interface Props {
@@ -114,14 +115,20 @@ export default function GraphPanel({ model }: Props) {
       )}
 
       <Space style={{ marginBottom: 12 }} wrap>
-        <Button
-          type="primary"
-          icon={<ReloadOutlined />}
+        <ArrowFillButton
+          as="button"
           onClick={rebuild}
-          loading={building}
+          disabled={building}
+          bgColor="var(--primary)"
+          textColor="#ffffff"
+          fillBgColor="var(--surface)"
+          fillTextColor="var(--primary)"
+          hoverFillBgColor="var(--accent)"
+          hoverFillTextColor="#ffffff"
+          style={{ opacity: building ? 0.6 : 1 }}
         >
-          {building ? '构建中' : '重新构建图谱'}
-        </Button>
+          {building ? '构建中…' : '重新构建图谱'}
+        </ArrowFillButton>
         {graph?.built_at && (
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             上次构建：{new Date(graph.built_at * 1000).toLocaleString()}
