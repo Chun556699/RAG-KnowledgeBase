@@ -30,5 +30,17 @@ export default defineConfig(() => {
       host: '0.0.0.0',
       port: 5173,
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // 拆分重型 vendor，利于浏览器缓存与并行加载
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            antd: ['antd', '@ant-design/icons'],
+            markdown: ['react-markdown', 'remark-gfm'],
+          },
+        },
+      },
+    },
   }
 })

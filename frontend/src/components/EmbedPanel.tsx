@@ -8,18 +8,41 @@
  *    可一键复制或打开演示页预览。
  */
 import { useEffect, useMemo, useState } from 'react'
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Col,
+  ColorPicker,
+  Empty,
+  Input,
+  Row,
+  Segmented,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from 'antd'
+import {
+  BookOutlined,
+  CodeOutlined,
+  CopyOutlined,
+  KeyOutlined,
+  LinkOutlined,
+  PlusOutlined,
+} from '@ant-design/icons'
 import { api } from '../api/client'
 import type { ApiKeyInfo, KnowledgeBase } from '../types'
-import Icon from './Icon'
 
 /** 脱敏密钥的占位（用于生成代码片段，真实密钥仅在创建时出现一次） */
 const KEY_PLACEHOLDER = 'ak_live_…'
 
 export default function EmbedPanel() {
+  const { message } = App.useApp()
   const [kbs, setKbs] = useState<KnowledgeBase[]>([])
   const [keys, setKeys] = useState<ApiKeyInfo[]>([])
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
 
   // 新建知识库表单
   const [kbName, setKbName] = useState('')
@@ -42,7 +65,7 @@ export default function EmbedPanel() {
       setKbs(kbList)
       setKeys(keyList)
     } catch (e) {
-      setError((e as Error).message)
+      message.error((e as Error).message)
     }
   }
 
@@ -72,10 +95,9 @@ export default function EmbedPanel() {
   const copySnippet = async () => {
     try {
       await navigator.clipboard.writeText(snippet)
-      setNotice('嵌入代码已复制到剪贴板')
-      setTimeout(() => setNotice(''), 2500)
+      message.success('嵌入代码已复制到剪贴板')
     } catch {
-      setError('复制失败，请手动选择复制')
+      message.error('复制失败，请手动选择复制')
     }
   }
 
@@ -85,10 +107,10 @@ export default function EmbedPanel() {
       await api.createKb({ name: kbName.trim(), description: kbDesc.trim() })
       setKbName('')
       setKbDesc('')
-      setNotice('知识库已创建')
+      message.success('知识库已创建')
       load()
     } catch (e) {
-      setError((e as Error).message)
+      message.error((e as Error).message)
     }
   }
 
@@ -102,22 +124,66 @@ export default function EmbedPanel() {
       })
       setFreshKey(res.raw_key)
       setKeyName('')
-      setNotice('密钥已创建，请立即保存——明文只显示这一次')
+      message.success('密钥已创建，请立即保存——明文只显示这一次')
       load()
     } catch (e) {
-      setError((e as Error).message)
+      message.error((e as Error).message)
     }
   }
 
   const revokeKey = async (id: string) => {
     try {
       await api.revokeKey(id)
-      setNotice('密钥已吊销')
+      message.success('密钥已吊销')
       load()
     } catch (e) {
-      setError((e as Error).message)
+      message.error((e as Error).message)
     }
   }
+
+  const keyColumns = [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, k: ApiKeyInfo) => (
+        <Space>
+          <span style={{ fontWeight: 500 }}>{name}</span>
+          {k.revoked && <Tag color="warning">已吊销</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: '前缀',
+      dataIndex: 'key_prefix',
+      key: 'key_prefix',
+      render: (p: string) => <Typography.Text code>{p}</Typography.Text>,
+    },
+    {
+      title: '范围',
+      dataIndex: 'kb_id',
+      key: 'kb_id',
+      render: (id?: string) =>
+        id ? <Tag color="blue">{kbs.find((k) => k.kb_id === id)?.name ?? id}</Tag> : <Tag>全部知识库</Tag>,
+    },
+    {
+      title: '最近使用',
+      dataIndex: 'last_used_at',
+      key: 'last_used_at',
+      render: (t?: number) => (t ? new Date(t * 1000).toLocaleString() : '—'),
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 80,
+      render: (_: unknown, k: ApiKeyInfo) =>
+        !k.revoked && (
+          <Button type="text" danger size="small" onClick={() => revokeKey(k.key_id)}>
+            吊销
+          </Button>
+        ),
+    },
+  ]
 
   return (
     <div>
@@ -127,208 +193,177 @@ export default function EmbedPanel() {
         公共问答接口走 <code>/api/v1</code>，密钥可绑定知识库实现租户隔离。
       </p>
 
-      {error && (
-        <div className="alert error">
-          <Icon name="alert" size={16} /> {error}
-        </div>
-      )}
-      {notice && (
-        <div className="alert success">
-          <Icon name="check" size={16} /> {notice}
-        </div>
-      )}
-
-      <div className="grid-2">
+      <Row gutter={16}>
         {/* ---------- 知识库管理 ---------- */}
-        <div className="card">
-          <div className="card-title">
-            <Icon name="book" size={16} /> 知识库
-          </div>
-          <div className="list" style={{ marginTop: 12 }}>
-            {kbs.map((kb) => (
-              <div key={kb.kb_id} className="doc-item">
-                <div>
-                  <div className="doc-name">{kb.name}</div>
-                  <div className="meta">
-                    {kb.kb_id} · {kb.document_count} 篇文档 · {kb.chunk_count} 个片段
+        <Col xs={24} lg={12}>
+          <Card
+            title={
+              <Space>
+                <BookOutlined /> 知识库
+              </Space>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {kbs.map((kb) => (
+                <Card key={kb.kb_id} size="small">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 500 }}>{kb.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {kb.kb_id} · {kb.document_count} 篇文档 · {kb.chunk_count} 个片段
+                      </div>
+                    </div>
+                    {kb.kb_id === 'default' && <Tag>内置</Tag>}
                   </div>
-                </div>
-                {kb.kb_id === 'default' && <span className="tag">内置</span>}
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <label className="field-label">名称</label>
-            <input
-              value={kbName}
-              onChange={(e) => setKbName(e.target.value)}
-              placeholder="如：客服知识库、产品手册"
-              style={{ width: '100%' }}
-            />
-            <label className="field-label">描述（可选）</label>
-            <input
-              value={kbDesc}
-              onChange={(e) => setKbDesc(e.target.value)}
-              placeholder="这个知识库存什么内容"
-              style={{ width: '100%' }}
-            />
-            <button
-              className="btn-primary"
-              style={{ marginTop: 12 }}
-              onClick={createKb}
-              disabled={!kbName.trim()}
-            >
-              <Icon name="plus" size={14} /> 创建知识库
-            </button>
-          </div>
-        </div>
+                </Card>
+              ))}
+            </div>
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Input
+                value={kbName}
+                onChange={(e) => setKbName(e.target.value)}
+                placeholder="名称，如：客服知识库、产品手册"
+              />
+              <Input
+                value={kbDesc}
+                onChange={(e) => setKbDesc(e.target.value)}
+                placeholder="描述（可选）：这个知识库存什么内容"
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={createKb} disabled={!kbName.trim()}>
+                创建知识库
+              </Button>
+            </div>
+          </Card>
+        </Col>
 
         {/* ---------- API 密钥管理 ---------- */}
-        <div className="card">
-          <div className="card-title">
-            <Icon name="key" size={16} /> API 密钥
-          </div>
-          <div className="list" style={{ marginTop: 12 }}>
-            {keys.length === 0 && <div className="empty">还没有密钥，先创建一个</div>}
-            {keys.map((k) => (
-              <div key={k.key_id} className="doc-item">
-                <div>
-                  <div className="doc-name">
-                    {k.name}
-                    {k.revoked && <span className="tag warn">已吊销</span>}
-                  </div>
-                  <div className="meta">
-                    <code>{k.key_prefix}</code>
-                    {' · '}
-                    {k.kb_id ? `绑定 ${k.kb_id}` : '全部知识库'}
-                    {k.last_used_at &&
-                      ` · 最近使用 ${new Date(k.last_used_at * 1000).toLocaleString()}`}
-                  </div>
-                </div>
-                {!k.revoked && (
-                  <button className="btn-danger" onClick={() => revokeKey(k.key_id)}>
-                    吊销
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <label className="field-label">密钥名称</label>
-            <input
-              value={keyName}
-              onChange={(e) => setKeyName(e.target.value)}
-              placeholder="如：官网挂件、App 生产环境"
-              style={{ width: '100%' }}
+        <Col xs={24} lg={12}>
+          <Card
+            title={
+              <Space>
+                <KeyOutlined /> API 密钥
+              </Space>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            <Table
+              rowKey="key_id"
+              dataSource={keys}
+              columns={keyColumns}
+              size="small"
+              pagination={false}
+              locale={{ emptyText: <Empty description="还没有密钥，先创建一个" /> }}
+              style={{ marginBottom: 14 }}
             />
-            <label className="field-label">绑定知识库（可选，绑定后仅可查该库）</label>
-            <select
-              value={keyKb}
-              onChange={(e) => setKeyKb(e.target.value)}
-              style={{ width: '100%' }}
-            >
-              <option value="">不绑定（可查全部知识库）</option>
-              {kbs.map((kb) => (
-                <option key={kb.kb_id} value={kb.kb_id}>
-                  {kb.name}（{kb.kb_id}）
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn-primary"
-              style={{ marginTop: 12 }}
-              onClick={createKey}
-              disabled={!keyName.trim()}
-            >
-              <Icon name="plus" size={14} /> 签发密钥
-            </button>
-          </div>
-        </div>
-      </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Input
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                placeholder="密钥名称，如：官网挂件、App 生产环境"
+              />
+              <Select
+                value={keyKb || undefined}
+                placeholder="绑定知识库（可选，绑定后仅可查该库）"
+                allowClear
+                options={kbs.map((kb) => ({ value: kb.kb_id, label: `${kb.name}（${kb.kb_id}）` }))}
+                onChange={(v) => setKeyKb(v ?? '')}
+              />
+              <Button type="primary" icon={<PlusOutlined />} onClick={createKey} disabled={!keyName.trim()}>
+                签发密钥
+              </Button>
+            </div>
+          </Card>
+        </Col>
+      </Row>
 
       {/* ---------- 新密钥明文（仅此一次） ---------- */}
       {freshKey && (
-        <div className="card" style={{ borderColor: 'var(--warning)' }}>
-          <div className="card-title">
-            <Icon name="key" size={16} /> 新密钥（只显示这一次，请立即保存）
-          </div>
-          <div className="code-block" style={{ marginTop: 10, userSelect: 'all' }}>
-            {freshKey}
-          </div>
-        </div>
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="新密钥（只显示这一次，请立即保存）"
+          description={
+            <Typography.Text copyable code style={{ userSelect: 'all' }}>
+              {freshKey}
+            </Typography.Text>
+          }
+        />
       )}
 
       {/* ---------- 嵌入代码生成器 ---------- */}
-      <div className="card">
-        <div className="card-title">
-          <Icon name="code" size={16} /> 嵌入代码生成器
-        </div>
-        <p className="panel-desc" style={{ marginTop: 8, marginBottom: 14 }}>
+      <Card
+        title={
+          <Space>
+            <CodeOutlined /> 嵌入代码生成器
+          </Space>
+        }
+      >
+        <p className="panel-desc" style={{ marginTop: 4, marginBottom: 14 }}>
           把下面代码粘到目标网页的 <code>&lt;body&gt;</code> 任意位置即可。挂件为纯原生 JS +
           Shadow DOM，与宿主页面样式完全隔离、零依赖。
         </p>
-        <div className="toolbar">
-          <label>
+        <Space wrap style={{ marginBottom: 14 }}>
+          <span>
             知识库：
-            <select value={snipKb} onChange={(e) => setSnipKb(e.target.value)}>
-              <option value="">默认（随密钥）</option>
-              {kbs.map((kb) => (
-                <option key={kb.kb_id} value={kb.kb_id}>
-                  {kb.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
+            <Select
+              size="small"
+              style={{ minWidth: 150 }}
+              value={snipKb || undefined}
+              placeholder="默认（随密钥）"
+              allowClear
+              options={kbs.map((kb) => ({ value: kb.kb_id, label: kb.name }))}
+              onChange={(v) => setSnipKb(v ?? '')}
+            />
+          </span>
+          <span>
             标题：
-            <input
+            <Input
+              size="small"
               value={snipTitle}
               onChange={(e) => setSnipTitle(e.target.value)}
               style={{ width: 120 }}
             />
-          </label>
-          <label>
+          </span>
+          <span>
             主题色：
-            <input
-              type="color"
+            <ColorPicker
+              size="small"
               value={snipColor}
-              onChange={(e) => setSnipColor(e.target.value)}
-              style={{ width: 42, padding: 4, height: 34 }}
+              onChange={(c) => setSnipColor(c.toHexString())}
             />
-          </label>
-          <label>
+          </span>
+          <span>
             位置：
-            <select
+            <Segmented
+              size="small"
               value={snipPos}
-              onChange={(e) => setSnipPos(e.target.value as 'right' | 'left')}
-            >
-              <option value="right">右下角</option>
-              <option value="left">左下角</option>
-            </select>
-          </label>
-        </div>
-        <div className="code-block">{snippet}</div>
-        <div className="toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
-          <button className="btn-primary" onClick={copySnippet}>
-            <Icon name="copy" size={14} /> 复制代码
-          </button>
-          <a
-            className="btn-ghost"
-            href={demoUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{ textDecoration: 'none' }}
-          >
-            <Icon name="external" size={14} /> 打开演示页
-            {freshKey ? '（已带密钥）' : ''}
-          </a>
+              options={[
+                { value: 'right', label: '右下角' },
+                { value: 'left', label: '左下角' },
+              ]}
+              onChange={(v) => setSnipPos(v as 'right' | 'left')}
+            />
+          </span>
+        </Space>
+        <Typography.Paragraph>
+          <pre className="code-block">{snippet}</pre>
+        </Typography.Paragraph>
+        <Space>
+          <Button type="primary" icon={<CopyOutlined />} onClick={copySnippet}>
+            复制代码
+          </Button>
+          <Button icon={<LinkOutlined />} href={demoUrl} target="_blank">
+            打开演示页{freshKey ? '（已带密钥）' : ''}
+          </Button>
           {!freshKey && (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               提示：演示页支持 <code>?key=ak_live_xxx</code> 参数直接预览
-            </span>
+            </Typography.Text>
           )}
-        </div>
-      </div>
+        </Space>
+      </Card>
     </div>
   )
 }

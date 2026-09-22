@@ -3,28 +3,46 @@
  *
  * 展示 RAG 的数据侧能力：
  *  - 拖拽/点击上传文档（PDF / Word / TXT / Markdown），后端自动解析、切分、向量化入库；
- *  - 文档列表展示分块数、大小等索引信息，并支持删除（同步清理向量）；
- *  - 语义检索输入框：输入查询后返回向量相似度最高的文档片段，直观演示检索效果。
+ *  - 文档表格展示分块数、大小、所属知识库等信息，支持删除（同步清理向量）；
+ *  - 语义检索输入框：输入查询后返回向量相似度最高的文档片段，直观演示检索效果；
+ *  - 多租户：可按知识库过滤列表、指定上传归属。
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  App,
+  Button,
+  Card,
+  Empty,
+  Input,
+  Popconfirm,
+  Select,
+  Space,
+  Spin,
+  Table,
+  Tag,
+  Upload,
+} from 'antd'
+import {
+  DeleteOutlined,
+  FileTextOutlined,
+  InboxOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from '@ant-design/icons'
 import { api, ApiError } from '../api/client'
 import type { DocumentInfo, KnowledgeBase, RetrievedChunk } from '../types'
-import Icon from './Icon'
 
 export default function DocumentsPanel() {
+  const { message } = App.useApp()
   const [docs, setDocs] = useState<DocumentInfo[]>([])
   const [kbs, setKbs] = useState<KnowledgeBase[]>([])
   // 当前查看/上传的目标知识库；空串 = 全部（仅列表）
   const [kb, setKb] = useState('default')
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [dragging, setDragging] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<RetrievedChunk[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   /** 拉取文档列表（随知识库过滤） */
   const refresh = async () => {
@@ -32,7 +50,7 @@ export default function DocumentsPanel() {
     try {
       setDocs(await api.listDocuments(kb || undefined))
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     } finally {
       setLoading(false)
     }
@@ -53,38 +71,25 @@ export default function DocumentsPanel() {
   /** 上传单个文件 */
   const upload = async (file: File) => {
     setUploading(true)
-    setError('')
-    setNotice('')
     try {
       const doc = await api.uploadDocument(file, kb || 'default')
-      setNotice(`已上传《${doc.filename}》，切分为 ${doc.chunk_count} 个片段并完成向量化。`)
+      message.success(`已上传《${doc.filename}》，切分为 ${doc.chunk_count} 个片段并完成向量化。`)
       await refresh()
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     } finally {
       setUploading(false)
     }
-  }
-
-  /** 处理文件选择 */
-  const handleFiles = (files: FileList | null) => {
-    if (files && files.length > 0) upload(files[0])
-  }
-
-  /** 拖拽释放 */
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
-    handleFiles(e.dataTransfer.files)
   }
 
   /** 删除文档 */
   const remove = async (id: string) => {
     try {
       await api.deleteDocument(id)
+      message.success('已删除')
       await refresh()
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     }
   }
 
@@ -93,12 +98,11 @@ export default function DocumentsPanel() {
     const q = query.trim()
     if (!q) return
     setSearching(true)
-    setError('')
     try {
       const res = await api.search(q, 5)
       setResults(res.chunks)
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     } finally {
       setSearching(false)
     }
@@ -111,6 +115,68 @@ export default function DocumentsPanel() {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`
   }
 
+  const kbName = (id?: string) => kbs.find((k) => k.kb_id === id)?.name ?? id
+
+  const columns = [
+    {
+      title: '文档',
+      dataIndex: 'filename',
+      key: 'filename',
+      render: (name: string) => (
+        <Space>
+          <FileTextOutlined style={{ color: 'var(--text-muted)' }} />
+          <span style={{ fontWeight: 500 }}>{name}</span>
+        </Space>
+      ),
+    },
+    {
+      title: '片段数',
+      dataIndex: 'chunk_count',
+      key: 'chunk_count',
+      width: 90,
+    },
+    {
+      title: '大小',
+      dataIndex: 'size_bytes',
+      key: 'size_bytes',
+      width: 100,
+      render: (v: number) => fmtSize(v),
+    },
+    {
+      title: '知识库',
+      dataIndex: 'kb_id',
+      key: 'kb_id',
+      width: 140,
+      render: (id?: string) =>
+        id && id !== 'default' ? <Tag color="blue">{kbName(id) ?? id}</Tag> : <Tag>默认库</Tag>,
+    },
+    {
+      title: '入库时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 170,
+      render: (t: number) => new Date(t * 1000).toLocaleString(),
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 90,
+      render: (_: unknown, d: DocumentInfo) => (
+        <Popconfirm
+          title={`删除「${d.filename}」及其全部向量片段？`}
+          okText="删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => remove(d.document_id)}
+        >
+          <Button type="text" danger icon={<DeleteOutlined />}>
+            删除
+          </Button>
+        </Popconfirm>
+      ),
+    },
+  ]
+
   return (
     <div>
       <h2 className="panel-title">知识库</h2>
@@ -118,129 +184,102 @@ export default function DocumentsPanel() {
         上传文档后自动完成解析、分块与向量化入库，可用于对话检索或在下方进行语义检索测试。
       </p>
 
-      {error && (
-        <div className="alert error">
-          <Icon name="alert" size={16} /> {error}
-        </div>
-      )}
-      {notice && (
-        <div className="alert success">
-          <Icon name="check" size={16} /> {notice}
-        </div>
-      )}
-
       {/* 上传区 */}
-      <div
-        className={`dropzone ${dragging ? 'drag' : ''}`}
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragging(true)
+      <Upload.Dragger
+        accept=".pdf,.docx,.txt,.md,.markdown"
+        showUploadList={false}
+        disabled={uploading}
+        beforeUpload={(file) => {
+          upload(file)
+          return false // 阻止 antd 默认上传，交由自定义 api
         }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
+        style={{ marginBottom: 16 }}
       >
-        {uploading ? (
-          <div className="dz-inner">
-            <span className="spinner" /> 正在上传并向量化…
-          </div>
-        ) : (
-          <div className="dz-inner">
-            <Icon name="upload" size={28} strokeWidth={1.6} />
-            <div>点击或拖拽文件到此处上传</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              支持 PDF / Word(.docx) / TXT / Markdown
-            </div>
-          </div>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.docx,.txt,.md,.markdown"
-          style={{ display: 'none' }}
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-      </div>
+        <p style={{ padding: '12px 0' }}>
+          {uploading ? (
+            <>
+              <Spin /> <span style={{ marginLeft: 8 }}>正在上传并向量化…</span>
+            </>
+          ) : (
+            <>
+              <InboxOutlined style={{ fontSize: 36, color: 'var(--primary)' }} />
+              <div style={{ marginTop: 8 }}>点击或拖拽文件到此处上传</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                支持 PDF / Word(.docx) / TXT / Markdown · 上传至「{kbName(kb || 'default')}」
+              </div>
+            </>
+          )}
+        </p>
+      </Upload.Dragger>
 
       {/* 语义检索 */}
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-title">
-          <Icon name="search" size={16} /> 语义检索测试
-        </div>
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <input
-            style={{ flex: 1 }}
+      <Card
+        title={
+          <Space>
+            <SearchOutlined /> 语义检索测试
+          </Space>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        <Space.Compact style={{ width: '100%' }}>
+          <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && search()}
+            onPressEnter={search}
             placeholder="输入查询语句，检索最相关的文档片段…"
           />
-          <button className="btn-primary" onClick={search} disabled={searching || !query.trim()}>
-            {searching ? '检索中…' : '检索'}
-          </button>
-        </div>
+          <Button type="primary" onClick={search} disabled={searching || !query.trim()} loading={searching}>
+            检索
+          </Button>
+        </Space.Compact>
         {results.length > 0 && (
-          <div className="list" style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {results.map((r, i) => (
-              <div key={i} className="card" style={{ margin: 0 }}>
-                <div style={{ marginBottom: 6 }}>
-                  <span className="tag">{r.filename}</span>{' '}
-                  <span className="tag score">相似度 {(r.score * 100).toFixed(1)}%</span>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{r.text}</div>
-              </div>
+              <Card key={i} size="small">
+                <Space style={{ marginBottom: 6 }}>
+                  <Tag>{r.filename}</Tag>
+                  <Tag color="success">相似度 {(r.score * 100).toFixed(1)}%</Tag>
+                </Space>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{r.text}</div>
+              </Card>
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* 文档列表 */}
-      <div className="toolbar">
-        <strong>已入库文档（{docs.length}）</strong>
-        <select
-          className="model-select"
-          style={{ width: 'auto', padding: '5px 10px' }}
-          value={kb}
-          onChange={(e) => setKb(e.target.value)}
-        >
-          <option value="">全部知识库</option>
-          {kbs.map((k) => (
-            <option key={k.kb_id} value={k.kb_id}>
-              {k.name}
-            </option>
-          ))}
-        </select>
-        <button className="btn-ghost" onClick={refresh} disabled={loading}>
-          <Icon name="refresh" size={15} /> {loading ? '刷新中…' : '刷新'}
-        </button>
-      </div>
-      {docs.length === 0 ? (
-        <div className="empty">暂无文档，请先上传。</div>
-      ) : (
-        <div className="doc-list">
-          {docs.map((d) => (
-            <div key={d.document_id} className="doc-item">
-              <div>
-                <div className="doc-name">
-                  <Icon name="file" size={16} /> {d.filename}
-                </div>
-                <div className="meta">
-                  {d.chunk_count} 个片段 · {fmtSize(d.size_bytes)} ·{' '}
-                  {new Date(d.created_at * 1000).toLocaleString()}
-                  {d.kb_id && d.kb_id !== 'default' && (
-                    <span className="tag" style={{ marginLeft: 6 }}>
-                      {d.kb_id}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <button className="btn-danger" onClick={() => remove(d.document_id)}>
-                <Icon name="trash" size={15} /> 删除
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      <Card
+        title={`已入库文档（${docs.length}）`}
+        extra={
+          <Space>
+            <Select
+              size="small"
+              style={{ minWidth: 160 }}
+              value={kb}
+              options={[
+                { value: 'default', label: '默认库' },
+                ...kbs
+                  .filter((k) => k.kb_id !== 'default')
+                  .map((k) => ({ value: k.kb_id, label: k.name })),
+              ]}
+              onChange={setKb}
+            />
+            <Button icon={<ReloadOutlined />} onClick={refresh} loading={loading} size="small">
+              刷新
+            </Button>
+          </Space>
+        }
+      >
+        <Table
+          rowKey="document_id"
+          dataSource={docs}
+          columns={columns}
+          loading={loading}
+          pagination={docs.length > 10 ? { pageSize: 10 } : false}
+          locale={{ emptyText: <Empty description="暂无文档，请先上传" /> }}
+          size="middle"
+        />
+      </Card>
     </div>
   )
 }

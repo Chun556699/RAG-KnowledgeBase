@@ -1,11 +1,11 @@
 /**
- * 模型选择器组件。
+ * 模型选择器组件（Ant Design Select）。
  *
  * 展示后端可用的 LLM 模型列表（DeepSeek / 小米 MiMo），允许用户在运行时切换模型。
- * 未配置 API Key 的提供商会以禁用样式呈现，并提示前往配置，
- * 直观展示"多模型支持 + 运行时切换"能力。
+ * 未配置 API Key 的提供商以禁用项呈现并在右侧标注，直观展示"多模型支持 + 运行时切换"能力。
  */
 import { useEffect, useState } from 'react'
+import { Badge, Select, Tag } from 'antd'
 import { api } from '../api/client'
 import type { ModelInfo, SelectedModel } from '../types'
 
@@ -50,46 +50,37 @@ export default function ModelSelector({ value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** 下拉选择时解析出 provider 与 model 并回调 */
-  const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const [provider, model] = e.target.value.split('::')
-    onChange({ provider, model })
-  }
-
-  if (loading) return <span className="tag">加载模型…</span>
-
   const selected = value
     ? models.find((m) => m.provider === value.provider && m.model === value.model)
     : undefined
   const anyAvailable = models.some((m) => m.available)
 
   return (
-    <div className="model-selector">
-      <span
-        className={`status-dot ${selected?.available ? 'ok' : 'err'}`}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Badge
+        status={selected?.available ? 'success' : 'error'}
         title={selected?.available ? '该模型已就绪' : '该模型未配置密钥'}
       />
-      <select
-        className="model-select"
-        value={value ? `${value.provider}::${value.model}` : ''}
-        onChange={handleSelect}
-        title="选择用于对话与 Agent 的大语言模型"
-      >
-        {models.map((m) => (
-          <option
-            key={`${m.provider}::${m.model}`}
-            value={`${m.provider}::${m.model}`}
-            disabled={!m.available}
-          >
-            {providerLabel(m.provider)} · {m.model}
-            {m.available ? '' : '（未配置密钥）'}
-          </option>
-        ))}
-      </select>
-      {!anyAvailable && (
-        <span className="tag warn" title="请在后端 .env 中填写 DEEPSEEK_API_KEY 或 MIMO_API_KEY">
+      <Select
+        size="small"
+        loading={loading}
+        style={{ flex: 1, minWidth: 0 }}
+        value={value ? `${value.provider}::${value.model}` : undefined}
+        placeholder="选择模型"
+        options={models.map((m) => ({
+          value: `${m.provider}::${m.model}`,
+          label: `${providerLabel(m.provider)} · ${m.model}${m.available ? '' : '（未配置密钥）'}`,
+          disabled: !m.available,
+        }))}
+        onChange={(v) => {
+          const [provider, model] = (v as string).split('::')
+          onChange({ provider, model })
+        }}
+      />
+      {!anyAvailable && !loading && (
+        <Tag color="warning" title="请在后端 .env 中填写 DEEPSEEK_API_KEY 或 MIMO_API_KEY">
           未配置密钥
-        </span>
+        </Tag>
       )}
     </div>
   )

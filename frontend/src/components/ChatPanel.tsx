@@ -2,14 +2,24 @@
  * 智能对话面板（RAG）。
  *
  * 展示"检索增强生成"的完整流程：
- *  - 用户提问后，可选择是否启用知识库检索（use_rag）；
+ *  - 用户提问后，可选择是否启用知识库检索（use_rag）与目标知识库（多租户）；
  *  - 通过 SSE 流式接收模型回答，实现打字机式实时反馈；
- *  - 回答下方展示本次引用的知识库来源片段与相似度分数；
+ *  - 回答以 Markdown 渲染，下方展示引用来源片段与 GraphRAG 命中关系；
  *  - 维护多轮会话上下文（session_id 由后端下发后固定）。
  */
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Alert, Button, Checkbox, Select, Spin, Tag, theme, Tooltip } from 'antd'
+import {
+  ApiOutlined,
+  LinkOutlined,
+  PartitionOutlined,
+  QuestionCircleOutlined,
+  RobotOutlined,
+  SendOutlined,
+  UserOutlined,
+} from '@ant-design/icons'
 import { api, chatStream } from '../api/client'
 import type {
   ChatMessage,
@@ -19,7 +29,6 @@ import type {
   RetrievedChunk,
   SelectedModel,
 } from '../types'
-import Icon from './Icon'
 
 interface Props {
   /** 当前选中的模型（来自全局选择器） */
@@ -36,6 +45,7 @@ export default function ChatPanel({ model }: Props) {
   // 多租户：当前对话命中的知识库（default 为内置库）
   const [kb, setKb] = useState('default')
   const [kbs, setKbs] = useState<KnowledgeBase[]>([])
+  const { token } = theme.useToken()
 
   useEffect(() => {
     api
@@ -163,12 +173,12 @@ export default function ChatPanel({ model }: Props) {
     return (
       <div className="sources">
         <div className="sources-head">
-          <Icon name="link" size={14} /> 参考来源（{sources.length}）
+          <LinkOutlined /> 参考来源（{sources.length}）
         </div>
         {sources.map((s, i) => (
           <div key={i} className="source-item">
-            <span className="tag">{s.filename}</span>{' '}
-            <span className="tag score">相似度 {(s.score * 100).toFixed(1)}%</span>{' '}
+            <Tag>{s.filename}</Tag>{' '}
+            <Tag color="success">相似度 {(s.score * 100).toFixed(1)}%</Tag>{' '}
             {s.text.slice(0, 80)}…
           </div>
         ))}
@@ -182,13 +192,13 @@ export default function ChatPanel({ model }: Props) {
     return (
       <div className="sources">
         <div className="sources-head">
-          <Icon name="graph" size={14} /> 图谱关系（{triples.length}）
+          <PartitionOutlined /> 图谱关系（{triples.length}）
         </div>
         {triples.map((t, i) => (
           <div key={i} className="source-item">
-            <span className="tag">{t.source}</span>{' '}
-            <span className="tag relation">-{t.relation}→</span>{' '}
-            <span className="tag">{t.target}</span>
+            <Tag>{t.source}</Tag>{' '}
+            <Tag color="purple">—{t.relation}→</Tag>{' '}
+            <Tag>{t.target}</Tag>
           </div>
         ))}
       </div>
@@ -203,9 +213,7 @@ export default function ChatPanel({ model }: Props) {
       </p>
 
       {error && (
-        <div className="alert error">
-          <Icon name="alert" size={16} /> {error}
-        </div>
+        <Alert type="error" showIcon message={error} style={{ marginBottom: 14 }} closable onClose={() => setError('')} />
       )}
 
       {/* 消息列表 */}
@@ -213,7 +221,7 @@ export default function ChatPanel({ model }: Props) {
         {messages.length === 0 && (
           <div className="chat-empty">
             <div className="chat-empty-icon">
-              <Icon name="message" size={30} strokeWidth={1.5} />
+              <ApiOutlined style={{ fontSize: 30 }} />
             </div>
             <div className="chat-empty-title">开始一段对话</div>
             <div className="chat-empty-desc">
@@ -231,12 +239,12 @@ export default function ChatPanel({ model }: Props) {
         {messages.map((m, i) => (
           <div key={i} className={`message ${m.role}`}>
             <div className="avatar">
-              <Icon name={m.role === 'user' ? 'user' : 'bot'} size={18} />
+              {m.role === 'user' ? <UserOutlined /> : <RobotOutlined />}
             </div>
             <div className="bubble">
               {m.role === 'assistant' && m.clarify && (
                 <div className="clarify-hint">
-                  <Icon name="help" size={13} /> 需要你补充一下
+                  <QuestionCircleOutlined /> 需要你补充一下
                 </div>
               )}
               {m.content ? (
@@ -248,7 +256,7 @@ export default function ChatPanel({ model }: Props) {
                   m.content
                 )
               ) : sending && i === messages.length - 1 ? (
-                <span className="spinner" />
+                <Spin size="small" />
               ) : (
                 ''
               )}
@@ -277,34 +285,28 @@ export default function ChatPanel({ model }: Props) {
       {/* 选项 + 输入区 */}
       <div>
         <div className="chat-options">
-          <label>
-            <input
-              type="checkbox"
-              checked={useRag}
-              onChange={(e) => setUseRag(e.target.checked)}
-            />
+          <Checkbox checked={useRag} onChange={(e) => setUseRag(e.target.checked)}>
             启用知识库检索（RAG）
-          </label>
+          </Checkbox>
           {useRag && kbs.length > 1 && (
-            <label>
+            <span>
               知识库：
-              <select
-                className="model-select"
-                style={{ width: 'auto', padding: '4px 8px' }}
+              <Select
+                size="small"
+                style={{ minWidth: 140 }}
                 value={kb}
-                onChange={(e) => setKb(e.target.value)}
-              >
-                {kbs.map((k) => (
-                  <option key={k.kb_id} value={k.kb_id}>
-                    {k.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={kbs.map((k) => ({ value: k.kb_id, label: k.name }))}
+                onChange={setKb}
+              />
+            </span>
           )}
-          {sessionId && <span className="tag">会话：{sessionId.slice(0, 8)}</span>}
+          {sessionId && (
+            <Tooltip title={`完整会话 ID：${sessionId}`}>
+              <Tag>会话：{sessionId.slice(0, 8)}</Tag>
+            </Tooltip>
+          )}
         </div>
-        <div className="chat-input-row">
+        <div className="chat-input-row" style={{ borderColor: sending ? undefined : token.colorBorder }}>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -312,9 +314,15 @@ export default function ChatPanel({ model }: Props) {
             placeholder="输入你的问题，Enter 发送，Shift+Enter 换行…"
             disabled={sending}
           />
-          <button className="btn-primary" onClick={() => send()} disabled={sending || !input.trim()}>
-            <Icon name="send" size={15} /> {sending ? '生成中…' : '发送'}
-          </button>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={() => send()}
+            disabled={sending || !input.trim()}
+            loading={sending}
+          >
+            {sending ? '生成中' : '发送'}
+          </Button>
         </div>
       </div>
     </div>
