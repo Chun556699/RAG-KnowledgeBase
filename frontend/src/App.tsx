@@ -129,13 +129,11 @@ function Shell() {
               fontSize: 17,
               fontWeight: 700,
               letterSpacing: '-0.01em',
-              background: 'linear-gradient(120deg, #2563eb, #7c3aed)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
             }}
           >
-            <FlipText duration={1.8}>超级知识库平台</FlipText>
+            <FlipText duration={1.8} className="brand-flip">
+              超级知识库平台
+            </FlipText>
           </div>
           <div style={{ fontSize: 11.5, color: token.colorTextTertiary, marginTop: 3 }}>
             RAG · 智能体 · 记忆管理

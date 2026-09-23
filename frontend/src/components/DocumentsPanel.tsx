@@ -195,7 +195,7 @@ export default function DocumentsPanel() {
         }}
         style={{ marginBottom: 16 }}
       >
-        <p style={{ padding: '12px 0' }}>
+        <div style={{ padding: '12px 0' }}>
           {uploading ? (
             <>
               <Spin /> <span style={{ marginLeft: 8 }}>正在上传并向量化…</span>
@@ -209,7 +209,7 @@ export default function DocumentsPanel() {
               </div>
             </>
           )}
-        </p>
+        </div>
       </Upload.Dragger>
 
       {/* 语义检索 */}

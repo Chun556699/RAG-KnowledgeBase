@@ -279,28 +279,40 @@ body {
   text-align: center;
   max-width: 460px;
   padding: 20px;
+  flex-shrink: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+.chat-empty-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  margin-bottom: 14px;
 }
 .chat-empty-icon {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 16px;
-  border-radius: 16px;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   color: var(--primary);
   background: var(--primary-soft);
 }
+.chat-empty-text {
+  min-width: 0;
+}
 .chat-empty-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 650;
   color: var(--text);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .chat-empty-desc {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-muted);
-  margin-bottom: 18px;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 .suggestions {
   display: flex;
@@ -563,6 +575,13 @@ body {
   transform-style: preserve-3d;
   will-change: transform;
 }
+/* 品牌名渐变：裁剪必须落在字符自身合成层上，祖先的 background-clip:text 到不了 */
+.brand-flip .flip-char {
+  background: linear-gradient(120deg, #2563eb, #7c3aed);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 .flip-text-wrapper:hover .flip-char,
 .flip-text-wrapper.flip-always .flip-char {
   animation: obsidian-flip-char var(--flip-duration, 2.2s) cubic-bezier(0.4, 0, 0.2, 1)
@@ -662,9 +681,12 @@ body {
   z-index: 0;
   border-radius: var(--radius);
   overflow: hidden;
-  pointer-events: none;
 }
 .chat-empty .chat-empty-inner {
   position: relative;
   z-index: 1;
+  pointer-events: none;
+}
+.chat-empty .chat-empty-inner .suggestions {
+  pointer-events: auto;
 }

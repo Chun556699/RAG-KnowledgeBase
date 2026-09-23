@@ -226,16 +226,20 @@ export default function ChatPanel({ model }: Props) {
               <DottedGrid style={{ width: '100%', height: '100%' }} />
             </div>
             <div className="chat-empty-inner">
-            <div className="chat-empty-icon">
-              <ApiOutlined style={{ fontSize: 30 }} />
-            </div>
-            <div className="chat-empty-title">
-              <FlipText className="flip-always" duration={2.6}>
-                开始一段对话
-              </FlipText>
-            </div>
-            <div className="chat-empty-desc">
-              开启“知识库检索”后，回答会引用你上传的文档内容。试试下面的问题：
+            <div className="chat-empty-head">
+              <div className="chat-empty-icon">
+                <ApiOutlined style={{ fontSize: 26 }} />
+              </div>
+              <div className="chat-empty-text">
+                <div className="chat-empty-title">
+                  <FlipText className="flip-always" duration={2.6}>
+                    开始一段对话
+                  </FlipText>
+                </div>
+                <div className="chat-empty-desc">
+                  开启“知识库检索”后，回答会引用你上传的文档内容。试试下面的问题：
+                </div>
+              </div>
             </div>
             <div className="suggestions">
               {suggestions.map((s, i) => (
