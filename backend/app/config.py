@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,8 +57,39 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
 
     # ---------- 向量库 ----------
-    # 本地轻量向量库（numpy 实现），单文件持久化，无需外部服务。
+    # 本地高性能向量库 v2：float32 二进制向量文件（<stem>.bin）+ SQLite 元数据
+    # （<stem>.meta.db），追加写 O(1)、增量持久化、启动时从旧版 JSON 自动迁移。
     vector_store_path: str = "./data/vectorstore.json"
+
+    # ---------- 平台库（知识库注册表 + API 密钥） ----------
+    platform_db_path: str = "./data/platform.db"
+
+    # ---------- 缓存（低开销进程内 TTL 缓存） ----------
+    # 查询嵌入缓存：相同/高频追问免重复嵌入调用（远端嵌入时省一次网络往返）
+    embedding_cache_ttl: int = 300
+    embedding_cache_size: int = 1024
+    # 检索结果缓存：键含向量库版本号，任何写入自动失效
+    retrieval_cache_ttl: int = 120
+    retrieval_cache_size: int = 512
+
+    # ---------- 公开 API / 可嵌入（把知识库嵌进任何产品） ----------
+    # 对外只读问答 API（/api/v1/*）与挂件（/embed/*）总开关
+    public_api_enabled: bool = True
+    # 公共端点限流：每把 API Key 每分钟允许的请求数（令牌桶）
+    public_rate_limit_per_minute: int = 60
+    # 管理端密钥：设置后，/api/keys 等管理端点要求 X-Admin-Key 鉴权；
+    # 缺省为空 → 本地/内网开发模式不鉴权（部署到公网时务必配置）
+    admin_api_key: str = ""
+
+    # ---------- 检索质量（可选高级特性，均默认低成本/可关闭） ----------
+    # MMR 多样性重排：λ 权衡相关性与重复度，纯向量运算零额外开销
+    mmr_enabled: bool = True
+    mmr_lambda: float = 0.7
+    # HyDE 查询扩展：先用 LLM 生成假设性回答再检索（每次问答 +1 次小模型调用）
+    hyde_enabled: bool = False
+    # Contextual Retrieval：索引期为每块生成 LLM 上下文前缀（Anthropic 技术，
+    # 显著提升召回精度；代价是摄取时每块一次 LLM 调用，默认关闭）
+    contextual_retrieval_enabled: bool = False
 
     # ---------- 运行时配置 ----------
     # Web 界面修改的运行时覆盖配置（LLM 密钥/端点、嵌入、重排序）的持久化文件。
@@ -120,9 +151,10 @@ class Settings(BaseSettings):
     max_history_turns: int = 20
 
     # ---------- 上传 ----------
-    # 上传文件保存目录。不限制单文件大小（如需限制可在此新增配置并在
-    # DocumentService 中启用校验，生产环境还需相应调整 Nginx client_max_body_size）。
+    # 上传文件保存目录。
     upload_dir: str = "./data/uploads"
+    # 单文件大小上限（MB）；生产环境还需同步调整 Nginx client_max_body_size。
+    upload_max_mb: int = 50
 
     @field_validator("cors_origins")
     @classmethod
@@ -143,6 +175,7 @@ class Settings(BaseSettings):
             str(Path(self.memory_db_path).parent),
             str(Path(self.graph_store_path).parent),
             str(Path(self.runtime_config_path).parent),
+            str(Path(self.platform_db_path).parent),
         ):
             Path(path).mkdir(parents=True, exist_ok=True)
 

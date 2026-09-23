@@ -8,18 +8,26 @@
  * 左侧列出可用工具，右侧以时间线形式呈现完整执行轨迹。
  */
 import { useEffect, useState } from 'react'
+import { App, Card, Col, Empty, Input, Row, Space, Spin, Tag } from 'antd'
+import {
+  ApartmentOutlined,
+  CheckCircleOutlined,
+  PlayCircleOutlined,
+  SearchOutlined,
+  ToolOutlined,
+} from '@ant-design/icons'
 import { api, ApiError } from '../api/client'
+import { ArrowFillButton } from '@/components/block/arrow-fill-button'
 import type { AgentResponse, SelectedModel } from '../types'
-import Icon from './Icon'
 
 interface Props {
   model: SelectedModel | null
 }
 
 export default function AgentPanel({ model }: Props) {
+  const { message } = App.useApp()
   const [query, setQuery] = useState('')
   const [running, setRunning] = useState(false)
-  const [error, setError] = useState('')
   const [result, setResult] = useState<AgentResponse | null>(null)
   const [tools, setTools] = useState<{ name: string; description: string }[]>([])
 
@@ -35,12 +43,11 @@ export default function AgentPanel({ model }: Props) {
     const q = query.trim()
     if (!q || running) return
     setRunning(true)
-    setError('')
     setResult(null)
     try {
       setResult(await api.runAgent(q, model?.provider, model?.model))
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     } finally {
       setRunning(false)
     }
@@ -60,138 +67,148 @@ export default function AgentPanel({ model }: Props) {
         Agent 会自动将复杂问题拆解为子任务，按需调用工具执行，并在完成后进行自我反思。
       </p>
 
-      {error && (
-        <div className="alert error">
-          <Icon name="alert" size={16} /> {error}
-        </div>
-      )}
-
-      <div className="grid-2">
+      <Row gutter={16}>
         {/* 左：输入 + 可用工具 */}
-        <div>
-          <div className="card">
-            <strong>提出任务</strong>
-            <textarea
-              style={{ width: '100%', marginTop: 10, minHeight: 90, resize: 'vertical' }}
+        <Col xs={24} lg={12}>
+          <Card title="提出任务" style={{ marginBottom: 16 }}>
+            <Input.TextArea
+              style={{ width: '100%' }}
+              rows={4}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="描述一个需要多步骤或工具协作的任务…"
               disabled={running}
             />
-            <div className="toolbar" style={{ marginTop: 10 }}>
-              <button className="btn-primary" onClick={run} disabled={running || !query.trim()}>
-                <Icon name="activity" size={15} /> {running ? '执行中…' : '运行 Agent'}
-              </button>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>示例：</div>
-            {examples.map((ex, i) => (
-              <div
-                key={i}
-                className="tag"
-                style={{ cursor: 'pointer', display: 'block', marginTop: 6 }}
-                onClick={() => setQuery(ex)}
+            <div style={{ marginTop: 12 }}>
+              <ArrowFillButton
+                as="button"
+                onClick={run}
+                disabled={running || !query.trim()}
+                bgColor="var(--primary)"
+                textColor="#ffffff"
+                fillBgColor="var(--surface)"
+                fillTextColor="var(--primary)"
+                hoverFillBgColor="var(--accent)"
+                hoverFillTextColor="#ffffff"
+                style={{ opacity: running || !query.trim() ? 0.55 : 1 }}
               >
-                {ex}
+                {running ? '执行中…' : '运行 Agent'}
+              </ArrowFillButton>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>示例：</div>
+            <Space wrap style={{ marginTop: 6 }}>
+              {examples.map((ex, i) => (
+                <Tag key={i} style={{ cursor: 'pointer' }} onClick={() => setQuery(ex)}>
+                  {ex}
+                </Tag>
+              ))}
+            </Space>
+          </Card>
+
+          <Card
+            title={
+              <Space>
+                <ToolOutlined /> 可用工具（{tools.length}）
+              </Space>
+            }
+          >
+            {tools.map((t) => (
+              <div key={t.name} style={{ marginBottom: 8 }}>
+                <Tag color="purple">{t.name}</Tag>{' '}
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t.description}</span>
               </div>
             ))}
-          </div>
-
-          <div className="card">
-            <div className="card-title">
-              <Icon name="tool" size={16} /> 可用工具（{tools.length}）
-            </div>
-            <div className="list" style={{ marginTop: 10 }}>
-              {tools.map((t) => (
-                <div key={t.name}>
-                  <span className="tag tool">{t.name}</span>{' '}
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t.description}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+          </Card>
+        </Col>
 
         {/* 右：执行轨迹 */}
-        <div>
+        <Col xs={24} lg={12}>
           {running && (
-            <div className="card">
-              <span className="spinner" /> Agent 正在规划与执行…
-            </div>
+            <Card style={{ marginBottom: 16 }}>
+              <Space>
+                <Spin size="small" /> Agent 正在规划与执行…
+              </Space>
+            </Card>
           )}
 
           {result && (
             <>
               {/* 规划 */}
-              <div className="card">
-                <div className="card-title">
-                  <Icon name="list" size={16} /> 任务规划（{result.plan.length} 步 · ReAct）
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  {result.plan.map((p) => (
-                    <div key={p.step} className="trace-step">
-                      <div className="step-head">
-                        步骤 {p.step}：{p.description}
-                      </div>
-                      {p.thought && (
-                        <div className="step-thought">
-                          <Icon name="activity" size={13} /> 推理：{p.thought}
-                        </div>
-                      )}
-                      {p.tool && <span className="tag tool">工具：{p.tool}</span>}
+              <Card
+                title={
+                  <Space>
+                    <ApartmentOutlined /> 任务规划（{result.plan.length} 步 · ReAct）
+                  </Space>
+                }
+                style={{ marginBottom: 16 }}
+              >
+                {result.plan.map((p) => (
+                  <div key={p.step} className="trace-step">
+                    <div className="step-head">
+                      步骤 {p.step}：{p.description}
                     </div>
-                  ))}
-                </div>
-              </div>
+                    {p.thought && <div className="step-thought">推理：{p.thought}</div>}
+                    {p.tool && <Tag color="purple">工具：{p.tool}</Tag>}
+                  </div>
+                ))}
+              </Card>
 
               {/* 执行过程 */}
-              <div className="card">
-                <div className="card-title">
-                  <Icon name="activity" size={16} /> 执行轨迹（推理 → 行动 → 观察）
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  {result.steps.map((s) => (
-                    <div key={s.step} className="trace-step">
-                      <div className="step-head">
-                        步骤 {s.step}：{s.description}
-                        {s.tool && <span className="tag tool"> {s.tool}</span>}
-                      </div>
-                      {s.thought && (
-                        <div className="step-thought">
-                          <Icon name="activity" size={13} /> 推理：{s.thought}
-                        </div>
-                      )}
-                      <div className="step-output">
-                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>观察：</span>{' '}
-                        {s.output}
-                      </div>
+              <Card
+                title={
+                  <Space>
+                    <PlayCircleOutlined /> 执行轨迹（推理 → 行动 → 观察）
+                  </Space>
+                }
+                style={{ marginBottom: 16 }}
+              >
+                {result.steps.map((s) => (
+                  <div key={s.step} className="trace-step">
+                    <div className="step-head">
+                      步骤 {s.step}：{s.description}
+                      {s.tool && <Tag color="purple" style={{ marginLeft: 6 }}>{s.tool}</Tag>}
                     </div>
-                  ))}
-                </div>
-              </div>
+                    {s.thought && <div className="step-thought">推理：{s.thought}</div>}
+                    <div className="step-output">
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>观察：</span>{' '}
+                      {s.output}
+                    </div>
+                  </div>
+                ))}
+              </Card>
 
               {/* 最终答案 */}
-              <div className="card">
-                <div className="card-title">
-                  <Icon name="check" size={16} /> 最终答案
-                </div>
-                <div style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>{result.answer}</div>
-              </div>
+              <Card
+                title={
+                  <Space>
+                    <CheckCircleOutlined /> 最终答案
+                  </Space>
+                }
+                style={{ marginBottom: 16 }}
+              >
+                <div style={{ whiteSpace: 'pre-wrap' }}>{result.answer}</div>
+              </Card>
 
               {/* 反思 */}
-              <div className="card">
-                <div className="card-title">
-                  <Icon name="search" size={16} /> 自我反思（迭代 {result.iterations} 轮）
-                </div>
-                <div style={{ marginTop: 10, color: 'var(--text-muted)' }}>{result.reflection}</div>
-              </div>
+              <Card
+                title={
+                  <Space>
+                    <SearchOutlined /> 自我反思（迭代 {result.iterations} 轮）
+                  </Space>
+                }
+              >
+                <div style={{ color: 'var(--text-secondary)' }}>{result.reflection}</div>
+              </Card>
             </>
           )}
 
           {!running && !result && (
-            <div className="empty">在左侧输入任务并运行，这里将展示完整的执行轨迹。</div>
+            <Card>
+              <Empty description="在左侧输入任务并运行，这里将展示完整的执行轨迹" />
+            </Card>
           )}
-        </div>
-      </div>
+        </Col>
+      </Row>
     </div>
   )
 }

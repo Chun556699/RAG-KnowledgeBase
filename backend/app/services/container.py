@@ -22,6 +22,9 @@ from app.core.graph.search import GraphSearcher
 from app.core.llm.factory import LLMFactory, get_llm_factory
 from app.core.memory.manager import MemoryManager
 from app.core.memory.store import MemoryStore
+from app.core.platform_db import PlatformDB
+from app.core.rag.cache import CachedEmbedder, RetrievalCache
+from app.core.rag.contextualize import Contextualizer
 from app.core.rag.embeddings import create_embedder
 from app.core.rag.reranker import create_reranker
 from app.core.rag.retriever import Retriever
@@ -50,6 +53,9 @@ class Container:
         self.settings = settings
         settings.ensure_directories()
 
+        # ---------- 平台库（知识库注册表 + API 密钥） ----------
+        self.platform = PlatformDB(settings.platform_db_path)
+
         # ---------- 运行时配置（.env 基线 + 网页端可改覆盖层） ----------
         self.config_store: RuntimeConfigStore = get_config_store()
 
@@ -57,14 +63,7 @@ class Container:
         self.llm_factory: LLMFactory = get_llm_factory()
 
         # ---------- RAG ----------
-        emb_cfg = self.config_store.effective_embedding()
-        embedder = create_embedder(
-            str(emb_cfg["provider"]),
-            dimension=int(emb_cfg["dimension"]),
-            api_key=str(emb_cfg["api_key"]),
-            base_url=str(emb_cfg["base_url"]),
-            model=str(emb_cfg["model"]),
-        )
+        embedder = self._build_embedder()
         vector_store = VectorStore(
             persist_path=settings.vector_store_path,
             embedder=embedder,
@@ -78,6 +77,11 @@ class Container:
         reranker = create_reranker(rr_cfg)
         # 稀疏索引（BM25）：与向量索引同步维护，用于混合检索
         sparse_index = BM25Index() if settings.hybrid_search_enabled else None
+        # 检索结果缓存（随库版本自动失效）
+        self.retrieval_cache = RetrievalCache(
+            ttl=settings.retrieval_cache_ttl,
+            maxsize=settings.retrieval_cache_size,
+        )
         self.retriever = Retriever(
             vector_store,
             splitter,
@@ -88,12 +92,26 @@ class Container:
             rrf_k=settings.rrf_k,
             dense_weight=settings.hybrid_dense_weight,
             sparse_weight=settings.hybrid_sparse_weight,
+            mmr_enabled=settings.mmr_enabled,
+            mmr_lambda=settings.mmr_lambda,
+            retrieval_cache=self.retrieval_cache,
+        )
+        # 稀疏索引为纯内存结构：启动时从向量库全量回填，保证重启后混合检索不退化
+        self.retriever.rebuild_sparse_from_store()
+
+        # Contextual Retrieval：开启时才构造（依赖 LLM）
+        contextualizer = (
+            Contextualizer(self.llm_factory, concurrency=settings.graph_extract_concurrency)
+            if settings.contextual_retrieval_enabled
+            else None
         )
 
         # 文档服务：编排上传 → 解析 → 索引 → 元数据管理
         self.documents = DocumentService(
             retriever=self.retriever,
             upload_dir=settings.upload_dir,
+            max_bytes=settings.upload_max_mb * 1024 * 1024,
+            contextualizer=contextualizer,
         )
 
         # ---------- 记忆 ----------
@@ -138,6 +156,23 @@ class Container:
 
         logger.info("依赖容器初始化完成")
 
+    def _build_embedder(self):
+        """按运行时配置构造嵌入器（含查询嵌入缓存装饰）。"""
+        emb_cfg = self.config_store.effective_embedding()
+        inner = create_embedder(
+            str(emb_cfg["provider"]),
+            dimension=int(emb_cfg["dimension"]),
+            api_key=str(emb_cfg["api_key"]),
+            base_url=str(emb_cfg["base_url"]),
+            model=str(emb_cfg["model"]),
+        )
+        # 查询嵌入缓存：仅包查询路径，摄取批量嵌入不缓存
+        return CachedEmbedder(
+            inner,
+            ttl=self.settings.embedding_cache_ttl,
+            maxsize=self.settings.embedding_cache_size,
+        )
+
     def _knowledge_search(self, query: str) -> str:
         """供 Agent 工具调用的知识库检索回调。"""
         chunks = self.retriever.retrieve(
@@ -162,20 +197,14 @@ class Container:
         )
 
     def reload_embedding(self) -> None:
-        """嵌入配置变更后重建嵌入器并热替换（若维度变化需重建索引）。"""
-        emb_cfg = self.config_store.effective_embedding()
-        embedder = create_embedder(
-            str(emb_cfg["provider"]),
-            dimension=int(emb_cfg["dimension"]),
-            api_key=str(emb_cfg["api_key"]),
-            base_url=str(emb_cfg["base_url"]),
-            model=str(emb_cfg["model"]),
-        )
-        self.retriever.set_embedder(embedder)
+        """嵌入配置变更后重建嵌入器（含缓存装饰）并热替换。"""
+        self.retriever.set_embedder(self._build_embedder())
 
     def shutdown(self) -> None:
         """释放资源（关闭数据库连接等）。"""
         self.memory_store.close()
+        self.platform.close()
+        self.retriever.close()
         logger.info("依赖容器已释放资源")
 
 

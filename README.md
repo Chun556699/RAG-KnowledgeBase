@@ -2,7 +2,7 @@
 
 <p><b>简体中文</b>　｜　<a href="#-english-introduction">English</a></p>
 
-> **一句话**：独立设计并实现的**生产级 AI 知识库平台**，打通 **RAG（真实语义嵌入 + 混合检索 + 两阶段重排序 + CRAG 纠正性检索）、ReAct 智能体、多模型 LLM、上下文记忆、知识图谱（含图增强检索）、RAGAS 质量评估** 六大能力；支持在 **Web 端接入 / 切换大模型密钥并脱密保护**，前后端分离 + 分层架构，Docker 一键部署。
+> **一句话**：独立设计并实现的**企业级 AI 知识库平台**，打通 **RAG（真实语义嵌入 + 混合检索 + MMR 多样性 + 两阶段重排序 + CRAG 纠正性检索）、ReAct 智能体、多模型 LLM、上下文记忆、知识图谱（含图增强检索）、RAGAS 质量评估** 六大能力；**多租户知识库 + API 密钥体系 + 公开问答 API + 一行脚本可嵌入的聊天挂件**，可开箱接入任何产品；前后端分离 + 分层架构，Docker 一键部署。
 
 本项目覆盖现代 AI 产品「文档摄取 → 向量检索 → 提示工程 → 智能体编排 → 多轮记忆 → 知识图谱 → 前端交互」的完整链路，是一个可运行、可测试、可扩展的工程作品集。为保证可演示性，嵌入内置**离线确定性 Mock**（零密钥即可跑通整条 RAG 链路），生产可一键切换为**真实语义嵌入（bge-m3）**。
 
@@ -10,7 +10,7 @@
 
 > A **production-grade AI Knowledge Base Platform**, independently designed and built, integrating five core capabilities: **RAG (real semantic embeddings + two-stage reranking), a ReAct agent, multi-provider LLMs, contextual memory, and a knowledge graph**. LLM / embedding / reranker **API keys can be configured and hot-switched from the Web UI with secret masking** — keys never leave the page. Decoupled frontend/backend with a layered architecture, one-command Docker deployment.
 
-It covers the full modern-AI pipeline — *document ingestion → vector retrieval → prompt engineering → agent orchestration → multi-turn memory → knowledge graph → web interaction* — as a runnable, testable and extensible engineering showcase. A built-in **offline deterministic mock embedder** lets the entire RAG chain run with **zero keys** (ideal for demos, CI and the 49 offline unit tests); switch to **real semantic embeddings (bge-m3)** for production.
+It covers the full modern-AI pipeline — *document ingestion → vector retrieval → prompt engineering → agent orchestration → multi-turn memory → knowledge graph → web interaction* — as a runnable, testable and extensible engineering showcase. A built-in **offline deterministic mock embedder** lets the entire RAG chain run with **zero keys** (ideal for demos, CI and the 107 offline unit tests); switch to **real semantic embeddings (bge-m3)** for production. **Enterprise-ready**: multi-tenant knowledge bases, API keys (hashed, kb-bound), a public ask API (`/api/v1/ask`), and a zero-dependency Shadow DOM chat widget that drops into any web page with one `<script>` tag.
 
 ---
 
@@ -18,8 +18,8 @@ It covers the full modern-AI pipeline — *document ingestion → vector retriev
 
 ![AI 知识库平台 Web 界面 · Web UI](./docs/assets/screenshot.png)
 
-> 单页应用，左侧导航涵盖**智能对话、知识库、知识图谱、智能体、记忆管理、提示工程、质量评估、系统设置**八大模块；顶部可实时切换模型，底部实时健康状态。
-> _A single-page app; the sidebar covers all seven modules: Chat, Documents, Knowledge Graph, Agent, Memory, Prompt Engineering and Settings._
+> 单页应用，左侧导航涵盖**智能对话、知识库、嵌入集成、知识图谱、智能体、记忆管理、提示工程、质量评估、系统设置**九大模块；顶部可实时切换模型，底部实时健康状态与深色/浅色主题切换。
+> _A single-page app; the sidebar covers nine modules: Chat, Documents, Embed Integration, Knowledge Graph, Agent, Memory, Prompt Engineering, Evaluation and Settings._
 
 ---
 
@@ -34,13 +34,19 @@ flowchart TB
     end
 
     subgraph Gateway["🌐 网关 Gateway"]
-        NG["Nginx 静态托管 + /api 反代（生产）<br/>Vite Proxy（开发）"]
+        NG["Nginx 静态托管 + /api 反代（生产）<br/>Vite Proxy（开发）<br/>/embed 挂件 + /api/v1 公开问答"]
     end
 
+    subgraph ThirdParty["🌍 任意第三方产品页面"]
+        WIDGET["widget.js 聊天挂件<br/>Shadow DOM 零依赖"]
+    end
+    WIDGET -->|"/api/v1/ask (+X-API-Key)"| NG
+
     subgraph Backend["⚙️ 后端 Backend · FastAPI · Python 3.11"]
-        APP["main.py · CORS / 全局异常 / lifespan / 路由注册"]
-        API["API 路由层 app/api<br/>documents · chat · agent · memory · models · graph · settings"]
+        APP["main.py · Request-ID/指标/安全头/双区CORS/限流 中间件 · 全局异常 · lifespan"]
+        API["API 路由层 app/api<br/>documents · chat · v1(公开) · admin(kbs/keys/metrics) · embed · agent · memory · models · graph · settings"]
         SVC["服务编排层 app/services<br/>Container 组合根 · Document / Chat / Agent / Graph Service"]
+        PLAT["PlatformDB · 知识库注册表 + API密钥(散列)"]
         subgraph CORE["核心能力层 app/core"]
             LLM["LLM 抽象 + 工厂"]
             RAG["RAG 混合检索 + 重排"]
@@ -53,9 +59,10 @@ flowchart TB
     end
 
     subgraph Infra["🗄️ 基础设施 Infrastructure"]
-        VS["numpy 向量库"]
+        VS["向量库 v2<br/>.bin 向量 + .meta.db 元数据"]
         DB["SQLite"]
         FS["文件系统 / 上传"]
+        CACHE["嵌入/检索 TTL 缓存"]
     end
 
     subgraph External["☁️ 外部服务 External · OpenAI 兼容"]
@@ -66,7 +73,8 @@ flowchart TB
 
     UI -->|"HTTP / SSE"| NG
     NG --> APP
-
+    API --> PLAT
+    RAG --> CACHE
     RAG --> VS
     RAG --> EMB
     RAG --> RR
@@ -92,17 +100,21 @@ flowchart TB
 | **知识图谱** | LLM 抽取「实体-关系-实体」三元组 → 并发限流 → 聚合去重加权 → cytoscape 可视化；**图增强检索（GraphRAG）**：实体匹配 + 邻居扩展，图谱三元组与文档片段联合注入提示词 |
 | **质量评估（RAGAS）** | LLM 自动评估回答的**忠实度**（是否编造）与**答案相关性**（是否切题）；前端「质量评估」面板可视化展示；支持离线回归 |
 | **系统设置** | Web 端配置 / 切换 LLM、嵌入、重排序密钥；脱敏展示；热重载免重启 |
-| **前端界面** | 深色主题、响应式布局；SSE 流式打字机效果；检索来源展示；Agent 执行轨迹时间线；实时健康状态 |
+| **多租户与嵌入集成** | 知识库级数据隔离（kb_id 贯穿文档/片段/检索/对话）；API 密钥签发/吊销/脱敏（仅存 SHA-256 散列，可绑定知识库强制租户隔离）；公开问答 API `POST /api/v1/ask[/stream]`（SSE）；Shadow DOM 聊天挂件 `/embed/widget.js` 一行接入任意网页；按密钥/IP 令牌桶限流 |
+| **性能** | 向量库 v2：float32 二进制追加写 + SQLite 元数据（O(1) 写入、软删除 + 启动压缩、旧版 JSON 自动迁移）；嵌入查询 TTL 缓存 + 检索结果缓存（按数据版本失效）；阻塞检索走 `asyncio.to_thread` 不卡事件循环；BM25 稀疏索引重启自动回填 |
+| **可观测性** | `X-Request-ID` 全链路透传；`/api/metrics` 暴露请求计数/延迟分桶/检索缓存命中率/LLM 用量等进程内指标 |
+| **前端界面** | 深色/浅色主题切换（跟随系统 + 持久化）、Markdown 渲染回答（表格/代码块）、响应式布局；SSE 流式打字机效果；检索来源展示；Agent 执行轨迹时间线；嵌入集成面板（密钥管理 + 代码生成器 + 演示页）；重组件按需懒加载 |
+| **安全** | 公共面（`/api/v1`、`/embed`）宽松 CORS、管理面白名单 CORS 分离；安全响应头；上传大小上限；密钥不明文落库 |
 
 ---
 
 ## 🏗️ 技术栈
 
-- **后端**：Python 3.11 · FastAPI · Pydantic v2 · pydantic-settings · asyncio · openai SDK · httpx · 本地 numpy 向量库 · SQLite
+- **后端**：Python 3.11 · FastAPI · Pydantic v2 · pydantic-settings · asyncio · openai SDK · httpx · numpy 向量库 v2（二进制 + SQLite）· cachetools · SQLite
 - **模型 / 服务**：DeepSeek · 小米 MiMo（OpenAI 兼容，可运行时切换）；嵌入 bge-m3；重排序 bge-reranker-v2-m3
-- **前端**：React 18 · Vite 5 · TypeScript（strict）· 原生 SSE 流式解析 · cytoscape
+- **前端**：React 18 · Vite 5 · TypeScript（strict）· react-markdown + remark-gfm · 原生 SSE 流式解析 · cytoscape · 按需懒加载
 - **部署**：Docker · Docker Compose · Nginx（静态托管 + API 反向代理）
-- **测试**：pytest · pytest-asyncio（49 例，全离线）
+- **测试**：pytest · pytest-asyncio（107 例，全离线）
 
 > 架构、API、部署的详细文档见 [`docs/`](./docs) 目录：
 > - [架构设计](./docs/architecture.md)
@@ -161,6 +173,44 @@ npm run dev
 
 ---
 
+## 🔌 嵌入集成（把问答能力嵌入任何产品）
+
+三步即可把知识库问答嵌入你的站点/App：
+
+**1) 创建知识库**（可选，默认库可直接用）：在「嵌入集成」页或 `POST /api/kbs` 创建，文档通过 `POST /api/documents/upload?kb=<kb_id>` 入库。
+
+**2) 签发 API 密钥**：「嵌入集成」页或 `POST /api/keys` 创建（`scopes=["ask"]`，可绑定知识库强制隔离）。明文仅创建时返回一次。
+
+**3) 一行脚本接入**：
+
+```html
+<script src="https://<你的后端域名>/embed/widget.js"
+        data-key="ak_live_xxxxxxxx"
+        data-title="智能助手"
+        data-color="#4f46e5"
+        async></script>
+```
+
+挂件为原生 JS + Shadow DOM，与宿主页面样式隔离、零依赖，自动右下角气泡 → 对话面板 → SSE 流式回答 + 来源标注。
+
+也可直接调用公开 API（`X-API-Key` 或 `Authorization: Bearer` 鉴权）：
+
+```bash
+curl -X POST https://<host>/api/v1/ask \
+  -H "X-API-Key: ak_live_xxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "你们的退款政策是什么？"}'
+# → {"session_id": "…", "answer": "…", "sources": [...], "kb_id": "default"}
+```
+
+流式：`POST /api/v1/ask/stream`（SSE：`meta` → `delta`* → `done`）。
+
+演示页：`/embed/demo?key=ak_live_xxx`。
+
+> 公开面默认允许任意源跨域（挂件需要），管理面仍受 `CORS_ORIGINS` 白名单约束；建议生产环境配置 `ADMIN_API_KEY`（管理端点需 `X-Admin-Key` 头）。
+
+---
+
 ## 🔑 配置模型密钥
 
 编辑 `backend/.env`（从 `.env.example` 复制而来），填入 DeepSeek 或小米 MiMo 的密钥：
@@ -198,6 +248,9 @@ pytest -v
 - `test_llm.py`：OpenAI 兼容提供商（DeepSeek/MiMo）的构造校验 + 工厂的切换与缓存
 - `test_retriever.py`：索引构建、语义检索、按文档删除、上下文拼接（使用内存版假向量库）
 - `test_vectorstore.py`：本地 numpy 向量库的增删、相似度检索、元数据过滤与持久化
+- `test_vectorstore_v2.py`：v2 二进制+SQLite 存储的持久化、kb 隔离、双通道嵌入、软删除与旧版迁移
+- `test_platform_db.py`：知识库注册表与 API 密钥生命周期（签发/校验/吊销/脱敏）
+- `test_v1_api.py`：公开问答 API 鉴权、租户隔离、SSE 流式、嵌入产物与指标端点
 
 ---
 
@@ -209,14 +262,18 @@ our-project/
 │   ├── app/
 │   │   ├── main.py             # 应用入口（生命周期、CORS、异常、路由）
 │   │   ├── config.py           # pydantic-settings 配置（离线嵌入默认开箱即用）
-│   │   ├── api/                # 路由层：documents / chat / agent / memory / models
+│   │   ├── api/                # 路由层：documents / chat / v1(公开问答) / admin(kbs+keys+metrics) / embed(挂件)
 │   │   ├── core/               # 核心能力
 │   │   │   ├── llm/            # LLM 抽象、各提供商、工厂、提示模板
-│   │   │   ├── rag/            # 加载/分块/嵌入/向量库/检索器
+│   │   │   ├── rag/            # 加载/分块/嵌入/向量库v2/检索器/缓存/MMR/Contextual Retrieval
 │   │   │   ├── agent/          # 工具/规划/执行/反思
-│   │   │   └── memory/         # SQLite 存储 + 记忆管理器
+│   │   │   ├── memory/         # SQLite 存储 + 记忆管理器
+│   │   │   ├── platform_db.py  # 平台库：知识库注册表 + API 密钥（SHA-256 散列）
+│   │   │   ├── middleware.py   # Request-ID/指标、双区 CORS、安全头、令牌桶限流
+│   │   │   └── metrics.py      # 进程内指标收集（/api/metrics）
 │   │   ├── services/          # 服务编排层（依赖容器 + 业务服务）
 │   │   ├── models/            # Pydantic 请求/响应 Schema
+│   │   ├── static/            # widget.js（Shadow DOM 挂件）+ demo.html
 │   │   └── utils/             # 日志、异常、解析工具
 │   ├── tests/                 # pytest 测试
 │   ├── requirements.txt
@@ -239,9 +296,12 @@ our-project/
 ## 💡 设计亮点
 
 - **依赖倒置与组合根**：所有子系统在 `services/container.py` 统一装配，路由通过依赖注入获取，便于测试与替换实现。
-- **离线可演示**：`MockEmbedder`（哈希词袋 + L2 归一化）+ 本地 numpy 向量库让整条 RAG 链路在零依赖、零密钥下也能真实运行；对话/Agent 填入 DeepSeek 或 MiMo 密钥即可启用。
+- **离线可演示**：`MockEmbedder`（哈希词袋 + L2 归一化）+ 本地向量库让整条 RAG 链路在零依赖、零密钥下也能真实运行；对话/Agent 填入 DeepSeek 或 MiMo 密钥即可启用。
 - **嵌入与向量库解耦**：自行计算嵌入并向本地向量库写入预计算向量，可自由切换嵌入实现。
-- **健壮性**：LLM 输出 JSON 的容错解析、Agent 规划失败的兜底计划、计算器工具的字符白名单防注入、全局异常处理器。
+- **写入零重写**：v2 向量库以「追加写二进制 + SQLite 元数据」取代整文件 JSON 重写，万级片段插入恒定 O(1)；检索走归一化矩阵点积（即余弦），删除为标记+惰性压缩。
+- **缓存正确性**：检索缓存键包含向量库版本号，任何写入/删除自动失效，不会出现脏读。
+- **租户强隔离**：密钥绑定知识库时，公开 API 强制只查绑定库，请求参数不可越界。
+- **健壮性**：LLM 输出 JSON 的容错解析、Agent 规划失败的兜底计划、计算器工具的字符白名单防注入、全局异常处理器、日志编码容错（Windows 控制台）。
 - **完整中文注释**：所有模块均含函数说明、参数、返回值与关键逻辑解释。
 
 ---

@@ -25,6 +25,36 @@ export interface DocumentInfo {
   chunk_count: number
   size_bytes: number
   created_at: number
+  /** 所属知识库（多租户） */
+  kb_id: string
+}
+
+/** 知识库（多租户单元：文档/检索/密钥均可按库隔离） */
+export interface KnowledgeBase {
+  kb_id: string
+  name: string
+  description: string
+  created_at: number
+  chunk_count: number
+  document_count: number
+}
+
+/** API 密钥（脱敏视图：仅前缀，绝不含明文） */
+export interface ApiKeyInfo {
+  key_id: string
+  name: string
+  key_prefix: string
+  scopes: string[]
+  kb_id: string | null
+  created_at: number
+  last_used_at: number | null
+  revoked: boolean
+}
+
+/** 创建密钥响应：raw_key 仅此一次返回 */
+export interface ApiKeyCreateResponse {
+  key: ApiKeyInfo
+  raw_key: string
 }
 
 /** 反问澄清（问题模糊时，助手向用户发出的澄清问题与候选方向） */

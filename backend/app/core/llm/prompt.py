@@ -217,6 +217,31 @@ RAGAS_FAITHFULNESS = PromptTemplate(
     ),
 )
 
+# HyDE 查询扩展：生成一段「假设性回答」用作稠密检索的嵌入输入
+# （假设文档与真实答案在向量空间中更接近，能召回原始问题查不到的片段）
+HYDE = PromptTemplate(
+    name="hyde",
+    description="HyDE 查询扩展：生成假设性文档片段用于稠密检索",
+    template=(
+        "请针对下方问题，直接撰写一段可能出现在知识库中的「假设性回答/文档片段」。\n"
+        "要求：100~200 字，陈述句、信息密度高、使用领域术语；不要承认是虚构的，"
+        "不要解释，只输出片段文本本身。\n\n问题：{question}"
+    ),
+)
+
+# Contextual Retrieval：为片段生成「它在文档中的语境」前缀
+CONTEXT_PREFIX = PromptTemplate(
+    name="context_prefix",
+    description="Contextual Retrieval：为片段生成定位语境前缀，提升嵌入检索精度",
+    template=(
+        "以下给出文档开头摘录与其中一个片段。请用一句话（不超过 60 字）说明该片段"
+        "在文档中的语境：它属于哪部分、讨论什么主题、涉及的指代对象是谁。\n"
+        "只输出这句语境说明本身，不要解释或引号。\n\n"
+        "文档摘录：\n{document}\n\n片段：\n{chunk}"
+    ),
+)
+
+
 # RAGAS 答案相关性评估：判断回答是否切题
 RAGAS_ANSWER_RELEVANCY = PromptTemplate(
     name="ragas_answer_relevancy",
@@ -248,6 +273,8 @@ _BUILTIN: Dict[str, PromptTemplate] = {
         RETRIEVAL_EVAL,
         RAGAS_FAITHFULNESS,
         RAGAS_ANSWER_RELEVANCY,
+        HYDE,
+        CONTEXT_PREFIX,
     )
 }
 

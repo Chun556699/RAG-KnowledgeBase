@@ -7,6 +7,8 @@
 
 import type {
   AgentResponse,
+  ApiKeyCreateResponse,
+  ApiKeyInfo,
   ChatResponse,
   Clarify,
   ConnectionTestResult,
@@ -14,6 +16,7 @@ import type {
   EvaluationResponse,
   GraphData,
   GraphTriple,
+  KnowledgeBase,
   LongTermItem,
   ModelInfo,
   PromptTemplate,
@@ -77,7 +80,8 @@ export const api = {
     }),
 
   // -------- 文档 / RAG --------
-  listDocuments: () => request<DocumentInfo[]>('/api/documents'),
+  listDocuments: (kb?: string) =>
+    request<DocumentInfo[]>(`/api/documents${kb ? `?kb=${encodeURIComponent(kb)}` : ''}`),
   deleteDocument: (id: string) =>
     request<{ success: boolean }>(`/api/documents/${id}`, { method: 'DELETE' }),
   search: (query: string, topK = 4) =>
@@ -86,9 +90,10 @@ export const api = {
       body: JSON.stringify({ query, top_k: topK }),
     }),
   /** 上传文档（multipart，不设置 Content-Type，交由浏览器自动生成 boundary） */
-  uploadDocument: async (file: File): Promise<DocumentInfo> => {
+  uploadDocument: async (file: File, kb = 'default'): Promise<DocumentInfo> => {
     const form = new FormData()
     form.append('file', file)
+    form.append('kb', kb)
     const resp = await fetch('/api/documents/upload', { method: 'POST', body: form })
     if (!resp.ok) {
       let message = `上传失败 (${resp.status})`
@@ -112,6 +117,7 @@ export const api = {
     use_rag: boolean
     top_k?: number
     allow_clarify?: boolean
+    kb?: string
   }) =>
     request<ChatResponse>('/api/chat', {
       method: 'POST',
@@ -218,6 +224,29 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  // -------- 知识库（多租户） --------
+  listKbs: () => request<KnowledgeBase[]>('/api/kbs'),
+  createKb: (payload: { name: string; description?: string }) =>
+    request<KnowledgeBase>('/api/kbs', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  // -------- API 密钥 --------
+  listKeys: () => request<ApiKeyInfo[]>('/api/keys'),
+  createKey: (payload: { name: string; scopes: string[]; kb_id?: string }) =>
+    request<ApiKeyCreateResponse>('/api/keys', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  revokeKey: (keyId: string) =>
+    request<{ success: boolean; message?: string }>(`/api/keys/${keyId}`, {
+      method: 'DELETE',
+    }),
+
+  // -------- 指标 --------
+  getMetrics: () => request<Record<string, unknown>>('/api/metrics'),
 }
 
 /**
@@ -238,6 +267,7 @@ export async function chatStream(
     use_rag: boolean
     top_k?: number
     allow_clarify?: boolean
+    kb?: string
   },
   handlers: {
     onMeta?: (meta: { session_id: string; sources: RetrievedChunk[]; graph_triples: GraphTriple[]; provider: string; model: string }) => void

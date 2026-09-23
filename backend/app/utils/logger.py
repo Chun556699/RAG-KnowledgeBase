@@ -13,6 +13,31 @@ from app.config import get_settings
 _CONFIGURED = False
 
 
+class _SafeStreamHandler(logging.StreamHandler):
+    """编码容错的标准输出日志处理器。
+
+    Windows 控制台默认 cp1252/GBK，中文日志会抛 UnicodeEncodeError；
+    此处对编码失败的消息降级为 replace 输出，保证日志不中断业务。
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            super().emit(record)
+        except UnicodeEncodeError:
+            try:
+                msg = self.format(record)
+                stream = self.stream
+                stream.write(
+                    msg.encode(stream.encoding or "utf-8", errors="replace").decode(
+                        stream.encoding or "utf-8"
+                    )
+                    + self.terminator
+                )
+                self.flush()
+            except Exception:  # noqa: BLE001
+                self.handleError(record)
+
+
 def _configure_root_logger() -> None:
     """配置根日志器：输出到标准输出，统一格式。仅执行一次。"""
     global _CONFIGURED
@@ -22,7 +47,7 @@ def _configure_root_logger() -> None:
     settings = get_settings()
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
-    handler = logging.StreamHandler(sys.stdout)
+    handler = _SafeStreamHandler(sys.stdout)
     handler.setFormatter(
         logging.Formatter(
             fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",

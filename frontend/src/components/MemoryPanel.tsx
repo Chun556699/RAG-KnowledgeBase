@@ -8,19 +8,38 @@
  *  - 记忆清理：触发过期数据（TTL）自动清理。
  */
 import { useEffect, useState } from 'react'
+import {
+  App,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Input,
+  List,
+  Popconfirm,
+  Row,
+  Select,
+  Space,
+  Tag,
+} from 'antd'
+import {
+  ClearOutlined,
+  DeleteOutlined,
+  MessageOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from '@ant-design/icons'
 import { api, ApiError } from '../api/client'
 import type { ChatMessage, LongTermItem, SessionInfo } from '../types'
-import Icon from './Icon'
 
 export default function MemoryPanel() {
+  const { message } = App.useApp()
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [activeSession, setActiveSession] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [keyword, setKeyword] = useState('')
   const [searchResults, setSearchResults] = useState<ChatMessage[]>([])
   const [longTerm, setLongTerm] = useState<LongTermItem[]>([])
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
 
   // 长期记忆写入表单
   const [ltKey, setLtKey] = useState('')
@@ -35,7 +54,7 @@ export default function MemoryPanel() {
       setSessions(s)
       setLongTerm(lt)
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     }
   }
 
@@ -46,11 +65,10 @@ export default function MemoryPanel() {
   /** 查看某会话的完整消息 */
   const openSession = async (id: string) => {
     setActiveSession(id)
-    setError('')
     try {
       setMessages(await api.getMessages(id))
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     }
   }
 
@@ -62,9 +80,10 @@ export default function MemoryPanel() {
         setActiveSession(null)
         setMessages([])
       }
+      message.success('会话已删除')
       await refresh()
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     }
   }
 
@@ -72,19 +91,16 @@ export default function MemoryPanel() {
   const search = async () => {
     const k = keyword.trim()
     if (!k) return
-    setError('')
     try {
       setSearchResults(await api.searchHistory(k))
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     }
   }
 
   /** 写入长期记忆 */
   const remember = async () => {
     if (!ltKey.trim() || !ltValue.trim()) return
-    setError('')
-    setNotice('')
     try {
       await api.remember({
         key: ltKey.trim(),
@@ -92,26 +108,24 @@ export default function MemoryPanel() {
         topic: ltTopic.trim() || undefined,
         importance: ltImportance,
       })
-      setNotice('已写入长期记忆。')
+      message.success('已写入长期记忆')
       setLtKey('')
       setLtValue('')
       setLtTopic('')
       await refresh()
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     }
   }
 
   /** 触发过期清理 */
   const cleanup = async () => {
-    setError('')
-    setNotice('')
     try {
       const res = await api.cleanupMemory()
-      setNotice(res.message)
+      message.success(res.message)
       await refresh()
     } catch (e) {
-      setError((e as ApiError).message)
+      message.error((e as ApiError).message)
     }
   }
 
@@ -122,147 +136,185 @@ export default function MemoryPanel() {
         维护多轮会话上下文、跨会话历史检索、持久化长期记忆，并支持过期数据自动清理。
       </p>
 
-      {error && (
-        <div className="alert error">
-          <Icon name="alert" size={16} /> {error}
-        </div>
-      )}
-      {notice && (
-        <div className="alert success">
-          <Icon name="check" size={16} /> {notice}
-        </div>
-      )}
+      <Space style={{ marginBottom: 16 }}>
+        <Button icon={<ReloadOutlined />} onClick={refresh}>
+          刷新
+        </Button>
+        <Popconfirm title="清理所有过期记忆？" onConfirm={cleanup} okText="清理" cancelText="取消">
+          <Button icon={<ClearOutlined />}>清理过期记忆</Button>
+        </Popconfirm>
+      </Space>
 
-      <div className="toolbar">
-        <button className="btn-ghost" onClick={refresh}>
-          <Icon name="refresh" size={15} /> 刷新
-        </button>
-        <button className="btn-ghost" onClick={cleanup}>
-          <Icon name="broom" size={15} /> 清理过期记忆
-        </button>
-      </div>
-
-      <div className="grid-2">
+      <Row gutter={16}>
         {/* 会话列表 + 详情 */}
-        <div className="card">
-          <div className="card-title">
-            <Icon name="message" size={16} /> 会话列表（{sessions.length}）
-          </div>
-          {sessions.length === 0 ? (
-            <div className="empty">暂无会话，去"智能对话"发起一次吧。</div>
-          ) : (
-            <div className="list" style={{ marginTop: 10 }}>
-              {sessions.map((s) => (
-                <div key={s.id} className="doc-item">
-                  <div style={{ cursor: 'pointer' }} onClick={() => openSession(s.id)}>
-                    <div>{s.title || '未命名会话'}</div>
-                    <div className="meta">
-                      {new Date(s.updated_at * 1000).toLocaleString()}
-                      {activeSession === s.id ? ' · 查看中' : ''}
-                    </div>
-                  </div>
-                  <button className="btn-danger" onClick={() => removeSession(s.id)}>
-                    删除
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        <Col xs={24} lg={12}>
+          <Card
+            title={
+              <Space>
+                <MessageOutlined /> 会话列表（{sessions.length}）
+              </Space>
+            }
+          >
+            {sessions.length === 0 ? (
+              <Empty description='暂无会话，去"智能对话"发起一次吧' />
+            ) : (
+              <List
+                size="small"
+                dataSource={sessions}
+                renderItem={(s) => (
+                  <List.Item
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => openSession(s.id)}
+                    actions={[
+                      <Popconfirm
+                        key="del"
+                        title="删除该会话及其消息？"
+                        okText="删除"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true }}
+                        onConfirm={(e) => {
+                          e?.stopPropagation()
+                          removeSession(s.id)
+                        }}
+                      >
+                        <Button
+                          type="text"
+                          danger
+                          size="small"
+                          icon={<DeleteOutlined />}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </Popconfirm>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={
+                        <span>
+                          {s.title || '未命名会话'}
+                          {activeSession === s.id && (
+                            <Tag color="processing" style={{ marginLeft: 6 }}>
+                              查看中
+                            </Tag>
+                          )}
+                        </span>
+                      }
+                      description={new Date(s.updated_at * 1000).toLocaleString()}
+                    />
+                  </List.Item>
+                )}
+              />
+            )}
 
-          {/* 选中会话的消息 */}
-          {activeSession && (
-            <div style={{ marginTop: 14 }}>
-              <strong>会话内容</strong>
-              <div className="list" style={{ marginTop: 8 }}>
-                {messages.map((m, i) => (
-                  <div key={i} className="code-block">
-                    <span className="tag">{m.role}</span> {m.content}
-                  </div>
-                ))}
+            {/* 选中会话的消息 */}
+            {activeSession && (
+              <div style={{ marginTop: 14 }}>
+                <strong>会话内容</strong>
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {messages.map((m, i) => (
+                    <div key={i} className="code-block">
+                      <Tag>{m.role}</Tag> {m.content}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </Card>
+        </Col>
 
         {/* 历史检索 + 长期记忆 */}
-        <div>
-          <div className="card">
-            <div className="card-title">
-              <Icon name="search" size={16} /> 历史检索
-            </div>
-            <div className="toolbar" style={{ marginTop: 10 }}>
-              <input
-                style={{ flex: 1 }}
+        <Col xs={24} lg={12}>
+          <Card
+            title={
+              <Space>
+                <SearchOutlined /> 历史检索
+              </Space>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            <Space.Compact style={{ width: '100%' }}>
+              <Input
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
+                onPressEnter={search}
                 placeholder="按关键词检索历史消息…"
               />
-              <button className="btn-primary" onClick={search}>
+              <Button type="primary" onClick={search}>
                 检索
-              </button>
-            </div>
+              </Button>
+            </Space.Compact>
             {searchResults.length > 0 && (
-              <div className="list" style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {searchResults.map((m, i) => (
                   <div key={i} className="code-block">
-                    <span className="tag">{m.role}</span> {m.content}
+                    <Tag>{m.role}</Tag> {m.content}
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
 
-          <div className="card">
-            <div className="card-title">
-              <Icon name="bookmark" size={16} /> 长期记忆
-            </div>
+          <Card title="长期记忆">
             {/* 写入表单 */}
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input value={ltKey} onChange={(e) => setLtKey(e.target.value)} placeholder="键（如：用户偏好语言）" />
-              <input value={ltValue} onChange={(e) => setLtValue(e.target.value)} placeholder="值（如：中文）" />
-              <div className="toolbar" style={{ margin: 0 }}>
-                <input
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Input
+                value={ltKey}
+                onChange={(e) => setLtKey(e.target.value)}
+                placeholder="键（如：用户偏好语言）"
+              />
+              <Input
+                value={ltValue}
+                onChange={(e) => setLtValue(e.target.value)}
+                placeholder="值（如：中文）"
+              />
+              <Space>
+                <Input
                   style={{ flex: 1 }}
                   value={ltTopic}
                   onChange={(e) => setLtTopic(e.target.value)}
                   placeholder="主题（可选）"
                 />
-                <select value={ltImportance} onChange={(e) => setLtImportance(Number(e.target.value))}>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      重要度 {n}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn-primary" onClick={remember}>
+                <Select
+                  style={{ width: 120 }}
+                  value={ltImportance}
+                  options={[1, 2, 3, 4, 5].map((n) => ({ value: n, label: `重要度 ${n}` }))}
+                  onChange={setLtImportance}
+                />
+                <Button type="primary" onClick={remember}>
                   记住
-                </button>
-              </div>
+                </Button>
+              </Space>
             </div>
 
             {/* 长期记忆列表 */}
             {longTerm.length === 0 ? (
-              <div className="empty">暂无长期记忆。</div>
+              <Empty description="暂无长期记忆" style={{ marginTop: 16 }} />
             ) : (
-              <div className="list" style={{ marginTop: 12 }}>
-                {longTerm.map((it) => (
-                  <div key={it.id} className="doc-item">
-                    <div>
-                      <div>
-                        <strong>{it.key}</strong>：{it.value}
-                      </div>
-                      <div className="meta">
-                        {it.topic && <span className="tag">{it.topic}</span>} 重要度 {it.importance}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <List
+                size="small"
+                style={{ marginTop: 12 }}
+                dataSource={longTerm}
+                renderItem={(it) => (
+                  <List.Item>
+                    <List.Item.Meta
+                      title={
+                        <span>
+                          <strong>{it.key}</strong>：{it.value}
+                        </span>
+                      }
+                      description={
+                        <Space>
+                          {it.topic && <Tag>{it.topic}</Tag>}
+                          <span style={{ fontSize: 12 }}>重要度 {it.importance}</span>
+                        </Space>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
             )}
-          </div>
-        </div>
-      </div>
+          </Card>
+        </Col>
+      </Row>
     </div>
   )
 }
