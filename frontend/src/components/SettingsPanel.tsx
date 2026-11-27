@@ -65,8 +65,15 @@ export default function SettingsPanel() {
   }
   const saveEmbedding = async () => {
     const values = await embeddingForm.validateFields()
+    const current = snapshot?.embedding
     try {
-      const data = await api.updateEmbeddingConfig({ ...values, api_key: values.api_key || undefined })
+      const data = await api.updateEmbeddingConfig({
+        provider: values.provider !== current?.provider ? values.provider : undefined,
+        model: values.model !== current?.model ? values.model : undefined,
+        base_url: values.base_url !== current?.base_url ? values.base_url : undefined,
+        dimension: values.dimension !== current?.dimension ? values.dimension : undefined,
+        api_key: values.api_key || undefined,
+      })
       embeddingForm.setFieldsValue({ api_key: '' })
       setSnapshot(data)
       message.success('嵌入配置已保存；如更换模型，建议重建索引')
@@ -74,8 +81,16 @@ export default function SettingsPanel() {
   }
   const saveReranker = async () => {
     const values = await rerankerForm.validateFields()
+    const current = snapshot?.reranker
     try {
-      const data = await api.updateRerankerConfig({ ...values, api_key: values.api_key || undefined })
+      const data = await api.updateRerankerConfig({
+        enabled: values.enabled !== current?.enabled ? values.enabled : undefined,
+        model: values.model !== current?.model ? values.model : undefined,
+        base_url: values.base_url !== current?.base_url ? values.base_url : undefined,
+        top_n: values.top_n !== current?.top_n ? values.top_n : undefined,
+        candidate_k: values.candidate_k !== current?.candidate_k ? values.candidate_k : undefined,
+        api_key: values.api_key || undefined,
+      })
       rerankerForm.setFieldsValue({ api_key: '' })
       setSnapshot(data)
       message.success('重排序配置已保存')
