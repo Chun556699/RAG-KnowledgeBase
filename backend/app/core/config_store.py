@@ -223,6 +223,17 @@ class RuntimeConfigStore:
             "dimension": int(o.get("dimension") or s.embedding_dimension),
         }
 
+    def embedding_override(self) -> Dict[str, object]:
+        """返回当前嵌入覆盖层副本，供配置更新失败时做事务性回滚。"""
+        with self._lock:
+            return dict(self._embedding)
+
+    def restore_embedding_override(self, override: Dict[str, object]) -> None:
+        """恢复嵌入覆盖层并落盘；仅用于失败配置更新的内部回滚。"""
+        with self._lock:
+            self._embedding = dict(override)
+            self._persist()
+
     def set_embedding(
         self,
         *,

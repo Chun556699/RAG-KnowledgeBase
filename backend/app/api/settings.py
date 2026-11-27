@@ -109,14 +109,23 @@ async def update_embedding_config(
     注意：切换嵌入模型可能改变向量维度，与库内已有向量不一致时检索会返回空，
     需重新上传文档重建索引。
     """
-    container.config_store.set_embedding(
-        provider=_clean(req.provider),
-        api_key=_clean(req.api_key),
-        base_url=_clean(req.base_url),
-        model=_clean(req.model),
-        dimension=req.dimension,
-    )
-    container.reload_embedding()
+    previous = container.config_store.embedding_override()
+    try:
+        container.config_store.set_embedding(
+            provider=_clean(req.provider),
+            api_key=_clean(req.api_key),
+            base_url=_clean(req.base_url),
+            model=_clean(req.model),
+            dimension=req.dimension,
+        )
+        container.reload_embedding()
+    except Exception:
+        container.config_store.restore_embedding_override(previous)
+        try:
+            container.reload_embedding()
+        except Exception as rollback_exc:  # noqa: BLE001  保留原配置失败仍需暴露
+            logger.error("嵌入配置回滚后重建失败: %s", rollback_exc)
+        raise
     logger.info("已更新嵌入配置: provider=%s", req.provider)
     return _snapshot(container)
 
