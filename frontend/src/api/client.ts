@@ -254,7 +254,14 @@ export async function chatStream(
       body: JSON.stringify(payload),
     })
     if (!resp.ok || !resp.body) {
-      throw new ApiError(resp.status, `流式请求失败 (${resp.status})`)
+      let message = `流式请求失败 (${resp.status})`
+      try {
+        const body = await resp.clone().json()
+        message = body.message || message
+      } catch {
+        /* 保留通用错误 */
+      }
+      throw new ApiError(resp.status, message)
     }
 
     const reader = resp.body.getReader()

@@ -81,6 +81,13 @@ class FakeVectorStore:
     def count(self) -> int:
         return len(self._data)
 
+    def all_chunks(self) -> List[RetrievedChunk]:
+        """返回全部片段，模拟真实向量库的全量遍历接口。"""
+        return [
+            RetrievedChunk(chunk_id=cid, text=text, score=0.0, metadata=meta)
+            for cid, (text, _vec, meta) in self._data.items()
+        ]
+
 
 @pytest.fixture
 def fake_vector_store() -> FakeVectorStore:

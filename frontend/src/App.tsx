@@ -1,48 +1,96 @@
-/**
- * 应用根组件。
- *
- * 负责：
- *  - 顶部品牌栏与全局模型选择器；
- *  - 左侧导航（对话 / 文档 / 智能体 / 记忆 / 提示工程）；
- *  - 后端健康状态轮询与展示；
- *  - 根据当前选中的功能页渲染对应面板。
- */
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import {
+  App as AntApp,
+  Badge,
+  Button,
+  ConfigProvider,
+  Drawer,
+  Grid,
+  Layout,
+  Menu,
+  Spin,
+  Tag,
+  theme,
+} from 'antd'
+import ApiOutlined from '@ant-design/icons/ApiOutlined'
+import BookOutlined from '@ant-design/icons/BookOutlined'
+import BranchesOutlined from '@ant-design/icons/BranchesOutlined'
+import DatabaseOutlined from '@ant-design/icons/DatabaseOutlined'
+import ExperimentOutlined from '@ant-design/icons/ExperimentOutlined'
+import MenuOutlined from '@ant-design/icons/MenuOutlined'
+import MessageOutlined from '@ant-design/icons/MessageOutlined'
+import RocketOutlined from '@ant-design/icons/RocketOutlined'
+import SettingOutlined from '@ant-design/icons/SettingOutlined'
 import { api } from './api/client'
 import type { SelectedModel } from './types'
-import Icon, { type IconName } from './components/Icon'
 import ModelSelector from './components/ModelSelector'
-import ChatPanel from './components/ChatPanel'
-import DocumentsPanel from './components/DocumentsPanel'
-import AgentPanel from './components/AgentPanel'
-import MemoryPanel from './components/MemoryPanel'
-import PromptPanel from './components/PromptPanel'
-import GraphPanel from './components/GraphPanel'
-import SettingsPanel from './components/SettingsPanel'
-import EvaluationPanel from './components/EvaluationPanel'
 
-/** 功能页标识 */
+const ChatPanel = lazy(() => import('./components/ChatPanel'))
+const DocumentsPanel = lazy(() => import('./components/DocumentsPanel'))
+const GraphPanel = lazy(() => import('./components/GraphPanel'))
+const AgentPanel = lazy(() => import('./components/AgentPanel'))
+const MemoryPanel = lazy(() => import('./components/MemoryPanel'))
+const PromptPanel = lazy(() => import('./components/PromptPanel'))
+const EvaluationPanel = lazy(() => import('./components/EvaluationPanel'))
+const SettingsPanel = lazy(() => import('./components/SettingsPanel'))
+
 type Tab = 'chat' | 'documents' | 'graph' | 'agent' | 'memory' | 'prompt' | 'evaluation' | 'settings'
 
-/** 导航项配置 */
-const NAV: { key: Tab; icon: IconName; label: string }[] = [
-  { key: 'chat', icon: 'message', label: '智能对话' },
-  { key: 'documents', icon: 'book', label: '知识库' },
-  { key: 'graph', icon: 'graph', label: '知识图谱' },
-  { key: 'agent', icon: 'cpu', label: '智能体' },
-  { key: 'memory', icon: 'database', label: '记忆管理' },
-  { key: 'prompt', icon: 'code', label: '提示工程' },
-  { key: 'evaluation', icon: 'activity', label: '质量评估' },
-  { key: 'settings', icon: 'settings', label: '系统设置' },
-]
+const NAV = [
+  { key: 'chat', icon: <MessageOutlined />, label: '智能对话', desc: 'RAG 问答与引用追溯' },
+  { key: 'documents', icon: <BookOutlined />, label: '知识库', desc: '文档摄取与检索测试' },
+  { key: 'graph', icon: <BranchesOutlined />, label: '知识图谱', desc: '实体关系可视化' },
+  { key: 'agent', icon: <ApiOutlined />, label: '智能体', desc: '任务规划与工具调用' },
+  { key: 'memory', icon: <DatabaseOutlined />, label: '记忆管理', desc: '会话与长期记忆' },
+  { key: 'prompt', icon: <ExperimentOutlined />, label: '提示工程', desc: '模板编排与版本管理' },
+  { key: 'evaluation', icon: <RocketOutlined />, label: '质量评估', desc: 'RAGAS 指标验证' },
+  { key: 'settings', icon: <SettingOutlined />, label: '系统设置', desc: '模型、密钥与检索参数' },
+] as const
+
+function SidebarContent({ tab, onSelect, model, setModel, healthy }: {
+  tab: Tab
+  onSelect: (tab: Tab) => void
+  model: SelectedModel | null
+  setModel: (model: SelectedModel | null) => void
+  healthy: boolean | null
+}) {
+  return (
+    <>
+      <div className="brand-block">
+        <div className="brand-mark">AI</div>
+        <div className="brand-title">超级知识库平台</div>
+        <div className="brand-subtitle">Enterprise RAG Console</div>
+      </div>
+      <div className="sider-model">
+        <span className="sider-label">当前模型</span>
+        <ModelSelector value={model} onChange={setModel} dark />
+      </div>
+      <Menu
+        className="app-menu"
+        theme="dark"
+        mode="inline"
+        selectedKeys={[tab]}
+        items={NAV.map((item) => ({ key: item.key, icon: item.icon, label: item.label }))}
+        onClick={({ key }) => onSelect(key as Tab)}
+      />
+      <div className="sider-footer">
+        <div className="status-row">
+          <span className={`status-dot ${healthy ? 'ok' : healthy === false ? 'err' : ''}`} />
+          <span>{healthy === null ? '检测后端服务中…' : healthy ? '后端服务正常' : '后端服务离线'}</span>
+        </div>
+      </div>
+    </>
+  )
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('chat')
   const [model, setModel] = useState<SelectedModel | null>(null)
-  // 后端健康状态：null=检测中，true=正常，false=异常
   const [healthy, setHealthy] = useState<boolean | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const screens = Grid.useBreakpoint()
+  const active = useMemo(() => NAV.find((item) => item.key === tab) ?? NAV[0], [tab])
 
-  // 挂载后立即检测一次，并每 15 秒轮询后端健康状态
   useEffect(() => {
     let timer: number
     const check = async () => {
@@ -58,57 +106,75 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [])
 
+  const selectTab = (next: Tab) => {
+    setTab(next)
+    setDrawerOpen(false)
+  }
+
+  const panel = (
+    <Suspense fallback={<div style={{ minHeight: 420, display: 'grid', placeItems: 'center' }}><Spin size="large" /></div>}>
+      {tab === 'chat' && <ChatPanel model={model} />}
+      {tab === 'documents' && <DocumentsPanel />}
+      {tab === 'graph' && <GraphPanel model={model} />}
+      {tab === 'agent' && <AgentPanel model={model} />}
+      {tab === 'memory' && <MemoryPanel />}
+      {tab === 'prompt' && <PromptPanel />}
+      {tab === 'evaluation' && <EvaluationPanel />}
+      {tab === 'settings' && <SettingsPanel />}
+    </Suspense>
+  )
+
   return (
-    <div className="app">
-      <div className="app-body">
-        {/* 左侧导航（内含品牌与模型选择） */}
-        <nav className="sidebar">
-          <div className="sidebar-brand">
-            <h1>超级知识库平台</h1>
-            <div className="subtitle">RAG · 智能体 · 记忆管理</div>
-          </div>
-
-          <div className="sidebar-model">
-            <span className="sidebar-label">当前模型</span>
-            <ModelSelector value={model} onChange={setModel} />
-          </div>
-
-          <div className="nav-group">
-            {NAV.map((item) => (
-              <button
-                key={item.key}
-                className={`nav-item ${tab === item.key ? 'active' : ''}`}
-                onClick={() => setTab(item.key)}
-              >
-                <span className="icon">
-                  <Icon name={item.icon} size={18} />
-                </span>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="sidebar-footer">
-            <span
-              className={`status-dot ${healthy ? 'ok' : 'err'}`}
-              title={healthy ? '后端服务正常' : '后端服务不可用'}
-            />
-            {healthy === null ? '检测中…' : healthy ? '服务正常' : '服务离线'}
-          </div>
-        </nav>
-
-        {/* 主内容区：根据 tab 渲染对应面板 */}
-        <main className="main">
-          {tab === 'chat' && <ChatPanel model={model} />}
-          {tab === 'documents' && <DocumentsPanel />}
-          {tab === 'graph' && <GraphPanel model={model} />}
-          {tab === 'agent' && <AgentPanel model={model} />}
-          {tab === 'memory' && <MemoryPanel />}
-          {tab === 'prompt' && <PromptPanel />}
-          {tab === 'evaluation' && <EvaluationPanel />}
-          {tab === 'settings' && <SettingsPanel />}
-        </main>
-      </div>
-    </div>
+    <ConfigProvider
+      theme={{
+        algorithm: theme.defaultAlgorithm,
+        token: {
+          colorPrimary: '#4f63ff',
+          colorInfo: '#4f63ff',
+          colorSuccess: '#16a34a',
+          colorWarning: '#d97706',
+          colorError: '#dc2626',
+          borderRadius: 12,
+          fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+        },
+        components: {
+          Layout: { siderBg: '#111a31', triggerBg: '#111a31' },
+          Menu: { darkItemBg: 'transparent', darkSubMenuItemBg: 'transparent' },
+          Card: { paddingLG: 20 },
+        },
+      }}
+    >
+      <AntApp>
+        <Layout className="app-shell">
+          {screens.md ? (
+            <Layout.Sider width={264} className="app-sider desktop-sider">
+              <SidebarContent tab={tab} onSelect={selectTab} model={model} setModel={setModel} healthy={healthy} />
+            </Layout.Sider>
+          ) : (
+            <Drawer placement="left" width={286} open={drawerOpen} onClose={() => setDrawerOpen(false)} closable={false} forceRender>
+              <SidebarContent tab={tab} onSelect={selectTab} model={model} setModel={setModel} healthy={healthy} />
+            </Drawer>
+          )}
+          <Layout className="app-main-layout">
+            <Layout.Header className="app-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <Button className="mobile-menu-btn" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />
+                <div>
+                  <div className="header-title">{active.label}</div>
+                  <div className="header-subtitle">{active.desc}</div>
+                </div>
+              </div>
+              <div className="header-actions">
+                <Tag color={model ? 'success' : 'warning'}>{model ? `${model.provider}/${model.model}` : '未选择模型'}</Tag>
+                <Badge status={healthy ? 'success' : healthy === false ? 'error' : 'processing'} text={healthy === null ? '连接中' : healthy ? '在线' : '离线'} />
+              </div>
+            </Layout.Header>
+            <Layout.Content className="app-content">
+              <div className="content-inner">{panel}</div>
+            </Layout.Content>
+          </Layout>
+        </Layout>
+      </AntApp>
+    </ConfigProvider>
   )
 }

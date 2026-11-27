@@ -1,268 +1,102 @@
-/**
- * 记忆管理面板。
- *
- * 展示上下文记忆的四类能力：
- *  - 会话管理：列出历史会话，点击查看多轮消息，可删除；
- *  - 历史检索：按关键词跨会话检索消息内容；
- *  - 长期记忆：写入/查看持久化的键值偏好信息（附主题与重要度）；
- *  - 记忆清理：触发过期数据（TTL）自动清理。
- */
 import { useEffect, useState } from 'react'
-import { api, ApiError } from '../api/client'
+import { App, Button, Card, Col, Empty, Form, Input, List, Modal, Popconfirm, Row, Select, Slider, Space, Table, Tabs, Tag, Typography } from 'antd'
+import ClearOutlined from '@ant-design/icons/ClearOutlined'
+import DeleteOutlined from '@ant-design/icons/DeleteOutlined'
+import PlusOutlined from '@ant-design/icons/PlusOutlined'
+import SearchOutlined from '@ant-design/icons/SearchOutlined'
+import type { ColumnsType } from 'antd/es/table'
+import { api } from '../api/client'
 import type { ChatMessage, LongTermItem, SessionInfo } from '../types'
-import Icon from './Icon'
 
 export default function MemoryPanel() {
+  const { message, modal } = App.useApp()
   const [sessions, setSessions] = useState<SessionInfo[]>([])
-  const [activeSession, setActiveSession] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [longTerm, setLongTerm] = useState<LongTermItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [keyword, setKeyword] = useState('')
   const [searchResults, setSearchResults] = useState<ChatMessage[]>([])
-  const [longTerm, setLongTerm] = useState<LongTermItem[]>([])
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [rememberOpen, setRememberOpen] = useState(false)
+  const [form] = Form.useForm()
 
-  // 长期记忆写入表单
-  const [ltKey, setLtKey] = useState('')
-  const [ltValue, setLtValue] = useState('')
-  const [ltTopic, setLtTopic] = useState('')
-  const [ltImportance, setLtImportance] = useState(3)
-
-  /** 加载会话与长期记忆列表 */
-  const refresh = async () => {
+  const load = async () => {
+    setLoading(true)
     try {
-      const [s, lt] = await Promise.all([api.listSessions(), api.listLongTerm()])
-      setSessions(s)
-      setLongTerm(lt)
-    } catch (e) {
-      setError((e as ApiError).message)
-    }
+      const [sessionList, memories] = await Promise.all([api.listSessions(), api.listLongTerm()])
+      setSessions(sessionList)
+      setLongTerm(memories)
+    } catch (err) { message.error((err as Error).message) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const showMessages = async (session: SessionInfo) => {
+    try {
+      const messages = await api.getMessages(session.id)
+      modal.info({ title: session.title || `会话 ${session.id.slice(0, 8)}`, width: 720, content: <div style={{ maxHeight: 480, overflow: 'auto' }}>{messages.map((m, i) => <div key={i} style={{ marginBottom: 12 }}><Tag color={m.role === 'user' ? 'blue' : 'purple'}>{m.role}</Tag><span style={{ whiteSpace: 'pre-wrap' }}>{m.content}</span></div>)}</div> })
+    } catch (err) { message.error((err as Error).message) }
   }
 
-  useEffect(() => {
-    refresh()
-  }, [])
-
-  /** 查看某会话的完整消息 */
-  const openSession = async (id: string) => {
-    setActiveSession(id)
-    setError('')
-    try {
-      setMessages(await api.getMessages(id))
-    } catch (e) {
-      setError((e as ApiError).message)
-    }
-  }
-
-  /** 删除会话 */
-  const removeSession = async (id: string) => {
-    try {
-      await api.deleteSession(id)
-      if (activeSession === id) {
-        setActiveSession(null)
-        setMessages([])
-      }
-      await refresh()
-    } catch (e) {
-      setError((e as ApiError).message)
-    }
-  }
-
-  /** 关键词检索历史 */
   const search = async () => {
-    const k = keyword.trim()
-    if (!k) return
-    setError('')
-    try {
-      setSearchResults(await api.searchHistory(k))
-    } catch (e) {
-      setError((e as ApiError).message)
-    }
+    if (!keyword.trim()) return
+    try { setSearchResults(await api.searchHistory(keyword.trim())) }
+    catch (err) { message.error((err as Error).message) }
   }
 
-  /** 写入长期记忆 */
   const remember = async () => {
-    if (!ltKey.trim() || !ltValue.trim()) return
-    setError('')
-    setNotice('')
+    const values = await form.validateFields()
     try {
-      await api.remember({
-        key: ltKey.trim(),
-        value: ltValue.trim(),
-        topic: ltTopic.trim() || undefined,
-        importance: ltImportance,
-      })
-      setNotice('已写入长期记忆。')
-      setLtKey('')
-      setLtValue('')
-      setLtTopic('')
-      await refresh()
-    } catch (e) {
-      setError((e as ApiError).message)
-    }
+      await api.remember(values)
+      message.success('长期记忆已保存')
+      setRememberOpen(false)
+      form.resetFields()
+      await load()
+    } catch (err) { message.error((err as Error).message) }
   }
 
-  /** 触发过期清理 */
   const cleanup = async () => {
-    setError('')
-    setNotice('')
     try {
-      const res = await api.cleanupMemory()
-      setNotice(res.message)
-      await refresh()
-    } catch (e) {
-      setError((e as ApiError).message)
-    }
+      const result = await api.cleanupMemory()
+      message.success(result.message || '过期记忆已清理')
+      await load()
+    } catch (err) { message.error((err as Error).message) }
   }
+
+  const sessionColumns: ColumnsType<SessionInfo> = [
+    { title: '会话', dataIndex: 'title', render: (v, row) => <Button type="link" onClick={() => showMessages(row)}>{v || row.id.slice(0, 8)}</Button> },
+    { title: '创建时间', dataIndex: 'created_at', width: 180, render: (v) => new Date(v * 1000).toLocaleString() },
+    { title: '更新时间', dataIndex: 'updated_at', width: 180, render: (v) => new Date(v * 1000).toLocaleString() },
+    { title: '操作', width: 90, render: (_, row) => <Popconfirm title="删除该会话？" onConfirm={async () => { await api.deleteSession(row.id); await load() }}><Button danger type="text" icon={<DeleteOutlined />} /></Popconfirm> },
+  ]
+  const memoryColumns: ColumnsType<LongTermItem> = [
+    { title: 'Key', dataIndex: 'key', width: 180, render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+    { title: '内容', dataIndex: 'value', render: (v) => <Typography.Paragraph ellipsis={{ rows: 2, expandable: true }} style={{ marginBottom: 0 }}>{v}</Typography.Paragraph> },
+    { title: '主题', dataIndex: 'topic', width: 130, render: (v) => v ? <Tag color="blue">{v}</Tag> : <Tag>默认</Tag> },
+    { title: '重要度', dataIndex: 'importance', width: 110, render: (v) => <Tag color={v >= 4 ? 'red' : v >= 3 ? 'orange' : 'default'}>{v}/5</Tag> },
+  ]
 
   return (
     <div>
-      <h2 className="panel-title">记忆管理</h2>
-      <p className="panel-desc">
-        维护多轮会话上下文、跨会话历史检索、持久化长期记忆，并支持过期数据自动清理。
-      </p>
-
-      {error && (
-        <div className="alert error">
-          <Icon name="alert" size={16} /> {error}
-        </div>
-      )}
-      {notice && (
-        <div className="alert success">
-          <Icon name="check" size={16} /> {notice}
-        </div>
-      )}
-
-      <div className="toolbar">
-        <button className="btn-ghost" onClick={refresh}>
-          <Icon name="refresh" size={15} /> 刷新
-        </button>
-        <button className="btn-ghost" onClick={cleanup}>
-          <Icon name="broom" size={15} /> 清理过期记忆
-        </button>
-      </div>
-
-      <div className="grid-2">
-        {/* 会话列表 + 详情 */}
-        <div className="card">
-          <div className="card-title">
-            <Icon name="message" size={16} /> 会话列表（{sessions.length}）
-          </div>
-          {sessions.length === 0 ? (
-            <div className="empty">暂无会话，去"智能对话"发起一次吧。</div>
-          ) : (
-            <div className="list" style={{ marginTop: 10 }}>
-              {sessions.map((s) => (
-                <div key={s.id} className="doc-item">
-                  <div style={{ cursor: 'pointer' }} onClick={() => openSession(s.id)}>
-                    <div>{s.title || '未命名会话'}</div>
-                    <div className="meta">
-                      {new Date(s.updated_at * 1000).toLocaleString()}
-                      {activeSession === s.id ? ' · 查看中' : ''}
-                    </div>
-                  </div>
-                  <button className="btn-danger" onClick={() => removeSession(s.id)}>
-                    删除
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 选中会话的消息 */}
-          {activeSession && (
-            <div style={{ marginTop: 14 }}>
-              <strong>会话内容</strong>
-              <div className="list" style={{ marginTop: 8 }}>
-                {messages.map((m, i) => (
-                  <div key={i} className="code-block">
-                    <span className="tag">{m.role}</span> {m.content}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 历史检索 + 长期记忆 */}
-        <div>
-          <div className="card">
-            <div className="card-title">
-              <Icon name="search" size={16} /> 历史检索
-            </div>
-            <div className="toolbar" style={{ marginTop: 10 }}>
-              <input
-                style={{ flex: 1 }}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
-                placeholder="按关键词检索历史消息…"
-              />
-              <button className="btn-primary" onClick={search}>
-                检索
-              </button>
-            </div>
-            {searchResults.length > 0 && (
-              <div className="list" style={{ marginTop: 10 }}>
-                {searchResults.map((m, i) => (
-                  <div key={i} className="code-block">
-                    <span className="tag">{m.role}</span> {m.content}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="card">
-            <div className="card-title">
-              <Icon name="bookmark" size={16} /> 长期记忆
-            </div>
-            {/* 写入表单 */}
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input value={ltKey} onChange={(e) => setLtKey(e.target.value)} placeholder="键（如：用户偏好语言）" />
-              <input value={ltValue} onChange={(e) => setLtValue(e.target.value)} placeholder="值（如：中文）" />
-              <div className="toolbar" style={{ margin: 0 }}>
-                <input
-                  style={{ flex: 1 }}
-                  value={ltTopic}
-                  onChange={(e) => setLtTopic(e.target.value)}
-                  placeholder="主题（可选）"
-                />
-                <select value={ltImportance} onChange={(e) => setLtImportance(Number(e.target.value))}>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      重要度 {n}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn-primary" onClick={remember}>
-                  记住
-                </button>
-              </div>
-            </div>
-
-            {/* 长期记忆列表 */}
-            {longTerm.length === 0 ? (
-              <div className="empty">暂无长期记忆。</div>
-            ) : (
-              <div className="list" style={{ marginTop: 12 }}>
-                {longTerm.map((it) => (
-                  <div key={it.id} className="doc-item">
-                    <div>
-                      <div>
-                        <strong>{it.key}</strong>：{it.value}
-                      </div>
-                      <div className="meta">
-                        {it.topic && <span className="tag">{it.topic}</span>} 重要度 {it.importance}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <div className="page-header"><div><h2 className="page-title">记忆管理</h2><p className="page-description">管理多轮会话、长期语义记忆与过期数据清理，保障上下文连续性。</p></div><div className="page-actions"><Button icon={<ClearOutlined />} onClick={cleanup}>清理过期</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => setRememberOpen(true)}>写入记忆</Button></div></div>
+      <Row gutter={[18, 18]} style={{ marginBottom: 18 }}>
+        <Col xs={24} md={8}><Card className="panel-card stat-card"><div className="stat-label">会话数量</div><div className="stat-value">{sessions.length}</div><div className="stat-extra">多轮上下文</div></Card></Col>
+        <Col xs={24} md={8}><Card className="panel-card stat-card"><div className="stat-label">长期记忆</div><div className="stat-value">{longTerm.length}</div><div className="stat-extra">跨会话知识</div></Card></Col>
+        <Col xs={24} md={8}><Card className="panel-card stat-card"><div className="stat-label">检索命中</div><div className="stat-value">{searchResults.length}</div><div className="stat-extra">历史搜索</div></Card></Col>
+      </Row>
+      <Card className="panel-card">
+        <Tabs items={[
+          { key: 'sessions', label: '会话记忆', children: <Table rowKey="id" loading={loading} columns={sessionColumns} dataSource={sessions} pagination={{ pageSize: 8 }} scroll={{ x: 700 }} /> },
+          { key: 'longterm', label: '长期记忆', children: <Table rowKey="id" loading={loading} columns={memoryColumns} dataSource={longTerm} pagination={{ pageSize: 8 }} scroll={{ x: 820 }} /> },
+          { key: 'search', label: '历史检索', children: <div><Space.Compact style={{ width: '100%', maxWidth: 720 }}><Input size="large" prefix={<SearchOutlined />} placeholder="搜索历史对话关键词" value={keyword} onChange={(e) => setKeyword(e.target.value)} onPressEnter={search} /><Button size="large" type="primary" onClick={search}>搜索</Button></Space.Compact><List style={{ marginTop: 16 }} dataSource={searchResults} locale={{ emptyText: <Empty description="输入关键词检索历史消息" /> }} renderItem={(item) => <List.Item className="soft-section"><div><Tag color={item.role === 'user' ? 'blue' : 'purple'}>{item.role}</Tag><Typography.Text>{item.content}</Typography.Text></div></List.Item>} /></div> },
+        ]} />
+      </Card>
+      <Modal title="写入长期记忆" open={rememberOpen} onOk={remember} onCancel={() => setRememberOpen(false)} okText="保存">
+        <Form form={form} layout="vertical" initialValues={{ importance: 3, topic: 'general' }}>
+          <Form.Item name="key" label="Key" rules={[{ required: true, message: '请输入 key' }]}><Input placeholder="例如 user_preference" /></Form.Item>
+          <Form.Item name="value" label="记忆内容" rules={[{ required: true, message: '请输入内容' }]}><Input.TextArea rows={4} /></Form.Item>
+          <Form.Item name="topic" label="主题"><Select options={['general', 'preference', 'project', 'fact'].map((v) => ({ value: v, label: v }))} /></Form.Item>
+          <Form.Item name="importance" label="重要度"><Slider min={1} max={5} marks={{ 1: '1', 3: '3', 5: '5' }} /></Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

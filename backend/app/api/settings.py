@@ -16,6 +16,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 
 from app.core.llm.base import GenerationConfig, Message, Role
+from app.core.rag.embeddings import create_embedder
 from app.core.rag.reranker import create_reranker
 from app.models.schemas import (
     ConnectionTestRequest,
@@ -109,14 +110,32 @@ async def update_embedding_config(
     注意：切换嵌入模型可能改变向量维度，与库内已有向量不一致时检索会返回空，
     需重新上传文档重建索引。
     """
-    container.config_store.set_embedding(
-        provider=_clean(req.provider),
-        api_key=_clean(req.api_key),
-        base_url=_clean(req.base_url),
-        model=_clean(req.model),
+    provider = _clean(req.provider)
+    api_key = _clean(req.api_key)
+    base_url = _clean(req.base_url)
+    model = _clean(req.model)
+    candidate = container.config_store.preview_embedding(
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
         dimension=req.dimension,
     )
-    container.reload_embedding()
+    embedder = create_embedder(
+        str(candidate["provider"]),
+        dimension=int(candidate["dimension"]),
+        api_key=str(candidate["api_key"]),
+        base_url=str(candidate["base_url"]),
+        model=str(candidate["model"]),
+    )
+    container.config_store.set_embedding(
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        dimension=req.dimension,
+    )
+    container.reload_embedding(embedder)
     logger.info("已更新嵌入配置: provider=%s", req.provider)
     return _snapshot(container)
 

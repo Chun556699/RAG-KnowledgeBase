@@ -10,7 +10,7 @@
 
 > A **production-grade AI Knowledge Base Platform**, independently designed and built, integrating five core capabilities: **RAG (real semantic embeddings + two-stage reranking), a ReAct agent, multi-provider LLMs, contextual memory, and a knowledge graph**. LLM / embedding / reranker **API keys can be configured and hot-switched from the Web UI with secret masking** — keys never leave the page. Decoupled frontend/backend with a layered architecture, one-command Docker deployment.
 
-It covers the full modern-AI pipeline — *document ingestion → vector retrieval → prompt engineering → agent orchestration → multi-turn memory → knowledge graph → web interaction* — as a runnable, testable and extensible engineering showcase. A built-in **offline deterministic mock embedder** lets the entire RAG chain run with **zero keys** (ideal for demos, CI and the 49 offline unit tests); switch to **real semantic embeddings (bge-m3)** for production.
+It covers the full modern-AI pipeline — *document ingestion → vector retrieval → prompt engineering → agent orchestration → multi-turn memory → knowledge graph → web interaction* — as a runnable, testable and extensible engineering showcase. A built-in **offline deterministic mock embedder** lets the entire RAG chain run with **zero keys** (ideal for demos, CI and the 78 offline unit tests); switch to **real semantic embeddings (bge-m3)** for production.
 
 ---
 
@@ -102,10 +102,12 @@ flowchart TB
 - **模型 / 服务**：DeepSeek · 小米 MiMo（OpenAI 兼容，可运行时切换）；嵌入 bge-m3；重排序 bge-reranker-v2-m3
 - **前端**：React 18 · Vite 5 · TypeScript（strict）· 原生 SSE 流式解析 · cytoscape
 - **部署**：Docker · Docker Compose · Nginx（静态托管 + API 反向代理）
-- **测试**：pytest · pytest-asyncio（49 例，全离线）
+- **测试**：pytest · pytest-asyncio（78 例，全离线）
 
 > 架构、API、部署的详细文档见 [`docs/`](./docs) 目录：
 > - [架构设计](./docs/architecture.md)
+> - [生产级 2.0 架构蓝图](./docs/production-blueprint.md)
+> - [生产级差距审计](./docs/production-gap-analysis.md)
 > - [API 文档](./docs/api.md)
 > - [部署指南](./docs/deployment.md)
 

@@ -111,6 +111,20 @@ def test_hybrid_retrieve_scoped_to_document(fake_vector_store):
     assert all(r.metadata["document_id"] == "d2" for r in results)
 
 
+def test_rebuild_sparse_index_restores_existing_chunks(fake_vector_store):
+    """重启场景：应能从向量库已有片段回填空的内存 BM25 索引。"""
+    fake_vector_store.add_chunks(
+        ["c1"],
+        ["机器学习 是 人工智能 的 核心 分支"],
+        [{"document_id": "d1", "filename": "ml.txt"}],
+    )
+    retriever = _build_hybrid_retriever(fake_vector_store)
+
+    assert retriever._sparse.count() == 0
+    assert retriever.rebuild_sparse_index() == 1
+    assert retriever._sparse.search("机器学习", top_k=1)[0].chunk_id == "c1"
+
+
 def test_rrf_fuse_boosts_chunk_in_both_lists():
     """两路都命中的片段经 RRF 融合后应排名第一，且得分为 1.0。"""
     dense = [

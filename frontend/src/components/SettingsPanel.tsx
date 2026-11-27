@@ -1,437 +1,144 @@
-/**
- * 系统设置面板。
- *
- * 在网页端完成大模型（LLM）的接入与切换，并管理嵌入与重排序服务：
- *  - LLM 提供商：填写/更新 API Key、端点、模型，切换默认模型，测试连通性；
- *  - 重排序：开关两阶段重排序，配置密钥/端点/模型/候选数/精排数并测试连通性；
- *  - 嵌入：查看/更新嵌入提供商、端点、模型、维度（切换后可能需重建索引）。
- *
- * 脱密保护：所有密钥仅以掩码（如 sk-a****wxyz）展示，真实密钥永不出网页；
- * 输入框留空或回填掩码占位视为「不修改」，避免误清空后端已保存的真实密钥。
- */
 import { useEffect, useState } from 'react'
-import { api, ApiError } from '../api/client'
+import { App, Button, Card, Col, Form, Input, InputNumber, Row, Space, Switch, Tabs, Tag, Typography } from 'antd'
+import CheckCircleOutlined from '@ant-design/icons/CheckCircleOutlined'
+import CloudServerOutlined from '@ant-design/icons/CloudServerOutlined'
+import KeyOutlined from '@ant-design/icons/KeyOutlined'
+import ReloadOutlined from '@ant-design/icons/ReloadOutlined'
+import SafetyCertificateOutlined from '@ant-design/icons/SafetyCertificateOutlined'
+import { api } from '../api/client'
 import type { SettingsSnapshot } from '../types'
-import Icon from './Icon'
 
-/** LLM 提供商草稿：仅承载用户本次编辑的增量 */
-interface LLMDraft {
-  api_key: string
-  base_url: string
-  model: string
-}
-
-/** 重排序草稿 */
-interface RerankerDraft {
-  enabled: boolean
-  api_key: string
-  base_url: string
-  model: string
-  top_n: number
-  candidate_k: number
-}
-
-/** 嵌入草稿 */
-interface EmbeddingDraft {
-  provider: string
-  api_key: string
-  base_url: string
-  model: string
-  dimension: number
-}
 
 export default function SettingsPanel() {
+  const { message } = App.useApp()
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [testing, setTesting] = useState('')
+  const [llmForms] = Form.useForm()
+  const [embeddingForm] = Form.useForm()
+  const [rerankerForm] = Form.useForm()
 
-  // 各分区的编辑草稿，null 表示未进入编辑
-  const [llmDrafts, setLlmDrafts] = useState<Record<string, LLMDraft>>({})
-  const [reranker, setReranker] = useState<RerankerDraft | null>(null)
-  const [embedding, setEmbedding] = useState<EmbeddingDraft | null>(null)
-
-  /** 拉取脱敏配置快照 */
+  const fillForms = (data: SettingsSnapshot) => {
+    const values: Record<string, unknown> = {}
+    data.llm.forEach((item) => {
+      values[`${item.provider}.model`] = item.model
+      values[`${item.provider}.base_url`] = item.base_url
+      values[`${item.provider}.api_key`] = ''
+    })
+    llmForms.setFieldsValue(values)
+    embeddingForm.setFieldsValue({ ...data.embedding, api_key: '' })
+    rerankerForm.setFieldsValue({ ...data.reranker, api_key: '' })
+  }
   const load = async () => {
+    setLoading(true)
     try {
-      const snap = await api.getSettings()
-      setSnapshot(snap)
-      // 用快照回填重排序 / 嵌入草稿（密钥留空，占位显示掩码）
-      setReranker({
-        enabled: snap.reranker.enabled,
-        api_key: '',
-        base_url: snap.reranker.base_url,
-        model: snap.reranker.model,
-        top_n: snap.reranker.top_n,
-        candidate_k: snap.reranker.candidate_k,
-      })
-      setEmbedding({
-        provider: snap.embedding.provider,
-        api_key: '',
-        base_url: snap.embedding.base_url,
-        model: snap.embedding.model,
-        dimension: snap.embedding.dimension,
-      })
-    } catch (e) {
-      setError((e as ApiError).message)
-    }
+      const data = await api.getSettings()
+      setSnapshot(data)
+      fillForms(data)
+    } catch (err) { message.error((err as Error).message) }
+    finally { setLoading(false) }
   }
+  useEffect(() => { load() }, [])
 
-  useEffect(() => {
-    load()
-  }, [])
-
-  /** 短暂提示 */
-  const flash = (msg: string) => {
-    setNotice(msg)
-    window.setTimeout(() => setNotice(''), 2800)
+  const saveDefault = async (provider: string) => {
+    try {
+      const data = await api.updateDefaultProvider(provider)
+      setSnapshot(data)
+      message.success('默认模型已切换')
+    } catch (err) { message.error((err as Error).message) }
   }
-
-  /** 获取/初始化某提供商的草稿 */
-  const draftFor = (provider: string): LLMDraft =>
-    llmDrafts[provider] ?? { api_key: '', base_url: '', model: '' }
-
-  /** 更新某提供商草稿字段 */
-  const setDraftField = (provider: string, field: keyof LLMDraft, value: string) => {
-    setLlmDrafts((prev) => ({
-      ...prev,
-      [provider]: { ...draftFor(provider), [field]: value },
-    }))
-  }
-
-  /** 保存某 LLM 提供商配置 */
   const saveLLM = async (provider: string) => {
-    const d = draftFor(provider)
-    setBusy(`llm:${provider}`)
-    setError('')
+    const values = llmForms.getFieldsValue()
+    const current = snapshot?.llm.find((item) => item.provider === provider)
+    const modelValue = values[`${provider}.model`]
+    const baseUrlValue = values[`${provider}.base_url`]
     try {
-      const snap = await api.updateLLMConfig(provider, {
-        api_key: d.api_key || undefined,
-        base_url: d.base_url || undefined,
-        model: d.model || undefined,
+      const data = await api.updateLLMConfig(provider, {
+        api_key: values[`${provider}.api_key`] || undefined,
+        base_url: baseUrlValue && baseUrlValue !== current?.base_url ? baseUrlValue : undefined,
+        model: modelValue && modelValue !== current?.model ? modelValue : undefined,
       })
-      setSnapshot(snap)
-      // 清空本提供商的密钥草稿，避免残留明文
-      setLlmDrafts((prev) => ({ ...prev, [provider]: { api_key: '', base_url: '', model: '' } }))
-      flash(`已保存 ${provider} 配置`)
-    } catch (e) {
-      setError((e as ApiError).message)
-    } finally {
-      setBusy('')
-    }
+      llmForms.setFieldsValue({ [`${provider}.api_key`]: '' })
+      setSnapshot(data)
+      message.success('LLM 配置已保存；密钥不回显')
+    } catch (err) { message.error((err as Error).message) }
   }
-
-  /** 切换默认提供商 */
-  const setDefault = async (provider: string) => {
-    setBusy(`default:${provider}`)
-    setError('')
-    try {
-      setSnapshot(await api.updateDefaultProvider(provider))
-      flash(`默认模型已切换为 ${provider}`)
-    } catch (e) {
-      setError((e as ApiError).message)
-    } finally {
-      setBusy('')
-    }
-  }
-
-  /** 测试连通性 */
-  const test = async (section: 'llm' | 'reranker', provider?: string) => {
-    setBusy(`test:${section}:${provider ?? ''}`)
-    setError('')
-    try {
-      const res = await api.testConnection({ section, provider })
-      if (res.ok) flash(res.message)
-      else setError(res.message)
-    } catch (e) {
-      setError((e as ApiError).message)
-    } finally {
-      setBusy('')
-    }
-  }
-
-  /** 保存重排序配置 */
-  const saveReranker = async () => {
-    if (!reranker) return
-    setBusy('reranker')
-    setError('')
-    try {
-      const snap = await api.updateRerankerConfig({
-        enabled: reranker.enabled,
-        api_key: reranker.api_key || undefined,
-        base_url: reranker.base_url || undefined,
-        model: reranker.model || undefined,
-        top_n: reranker.top_n,
-        candidate_k: reranker.candidate_k,
-      })
-      setSnapshot(snap)
-      setReranker((r) => (r ? { ...r, api_key: '' } : r))
-      flash('重排序配置已保存')
-    } catch (e) {
-      setError((e as ApiError).message)
-    } finally {
-      setBusy('')
-    }
-  }
-
-  /** 保存嵌入配置 */
   const saveEmbedding = async () => {
-    if (!embedding) return
-    setBusy('embedding')
-    setError('')
+    const values = await embeddingForm.validateFields()
+    const current = snapshot?.embedding
     try {
-      const snap = await api.updateEmbeddingConfig({
-        provider: embedding.provider || undefined,
-        api_key: embedding.api_key || undefined,
-        base_url: embedding.base_url || undefined,
-        model: embedding.model || undefined,
-        dimension: embedding.dimension,
+      const data = await api.updateEmbeddingConfig({
+        provider: values.provider !== current?.provider ? values.provider : undefined,
+        model: values.model !== current?.model ? values.model : undefined,
+        base_url: values.base_url !== current?.base_url ? values.base_url : undefined,
+        dimension: values.dimension !== current?.dimension ? values.dimension : undefined,
+        api_key: values.api_key || undefined,
       })
-      setSnapshot(snap)
-      setEmbedding((e2) => (e2 ? { ...e2, api_key: '' } : e2))
-      flash('嵌入配置已保存（若切换了模型/维度，请重新上传文档重建索引）')
-    } catch (e) {
-      setError((e as ApiError).message)
-    } finally {
-      setBusy('')
-    }
+      embeddingForm.setFieldsValue({ api_key: '' })
+      setSnapshot(data)
+      message.success('嵌入配置已保存；如更换模型，建议重建索引')
+    } catch (err) { message.error((err as Error).message) }
+  }
+  const saveReranker = async () => {
+    const values = await rerankerForm.validateFields()
+    const current = snapshot?.reranker
+    try {
+      const data = await api.updateRerankerConfig({
+        enabled: values.enabled !== current?.enabled ? values.enabled : undefined,
+        model: values.model !== current?.model ? values.model : undefined,
+        base_url: values.base_url !== current?.base_url ? values.base_url : undefined,
+        top_n: values.top_n !== current?.top_n ? values.top_n : undefined,
+        candidate_k: values.candidate_k !== current?.candidate_k ? values.candidate_k : undefined,
+        api_key: values.api_key || undefined,
+      })
+      rerankerForm.setFieldsValue({ api_key: '' })
+      setSnapshot(data)
+      message.success('重排序配置已保存')
+    } catch (err) { message.error((err as Error).message) }
+  }
+  const test = async (section: 'llm' | 'reranker', provider?: string) => {
+    const key = `${section}:${provider || 'default'}`
+    setTesting(key)
+    try {
+      const result = await api.testConnection({ section, provider })
+      result.ok ? message.success(result.message) : message.warning(result.message)
+    } catch (err) { message.error((err as Error).message) }
+    finally { setTesting('') }
   }
 
-  if (!snapshot) {
-    return (
-      <div>
-        <h2 className="panel-title">系统设置</h2>
-        {error ? (
-          <div className="alert error">
-            <Icon name="alert" size={16} /> {error}
-          </div>
-        ) : (
-          <div className="empty">加载配置中…</div>
-        )}
-      </div>
-    )
-  }
+  const llmTab = (
+    <Form form={llmForms} layout="vertical">
+      <Row gutter={[18, 18]}>
+        {snapshot?.llm.map((item) => (
+          <Col xs={24} xl={12} key={item.provider}>
+            <Card className="subtle-card" title={<Space><CloudServerOutlined />{item.provider}</Space>} extra={<Space>{item.has_key ? <Tag color="success">已配置密钥</Tag> : <Tag color="warning">未配置密钥</Tag>}{snapshot.default_provider === item.provider && <Tag color="blue">默认</Tag>}</Space>}>
+              <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>{item.description}</Typography.Paragraph><Form.Item name={`${item.provider}.model`} label="模型"><Input placeholder="模型名称" /></Form.Item>
+              <Form.Item name={`${item.provider}.base_url`} label="Base URL"><Input placeholder="https://api.example.com/v1" /></Form.Item>
+              <Form.Item name={`${item.provider}.api_key`} label={`API Key（当前：${item.api_key_masked || '未配置'}）`}><Input.Password placeholder="输入新密钥；留空则不修改" autoComplete="new-password" /></Form.Item>
+              <Space wrap><Button type="primary" onClick={() => saveLLM(item.provider)}>保存</Button><Button loading={testing === `llm:${item.provider}`} onClick={() => test('llm', item.provider)}>测试连接</Button><Button onClick={() => saveDefault(item.provider)} disabled={snapshot.default_provider === item.provider || !item.available}>设为默认</Button></Space>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+    </Form>
+  )
 
   return (
     <div>
-      <h2 className="panel-title">系统设置</h2>
-      <p className="panel-desc">
-        在网页端完成大模型密钥的接入与切换，并管理嵌入与重排序服务。所有密钥均以掩码展示（脱密保护），
-        真实密钥不会返回浏览器；输入框留空表示保持原有密钥不变。
-      </p>
-
-      {error && (
-        <div className="alert error">
-          <Icon name="alert" size={16} /> {error}
-        </div>
-      )}
-      {notice && (
-        <div className="alert">
-          <Icon name="check" size={16} /> {notice}
-        </div>
-      )}
-
-      {/* ---------------- LLM 提供商 ---------------- */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">
-          <Icon name="cpu" size={16} /> 大模型接入（当前默认：{snapshot.default_provider}）
-        </div>
-        <div className="grid-2" style={{ marginTop: 12 }}>
-          {snapshot.llm.map((p) => {
-            const d = draftFor(p.provider)
-            const isDefault = snapshot.default_provider === p.provider
-            return (
-              <div
-                key={p.provider}
-                className="card"
-                style={{ borderColor: isDefault ? 'var(--primary)' : undefined }}
-              >
-                <div
-                  className="card-title"
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span>
-                    <Icon name="key" size={15} /> {p.description}
-                  </span>
-                  <span className={`status-dot ${p.available ? 'ok' : 'err'}`} title={p.available ? '已配置密钥' : '未配置密钥'} />
-                </div>
-
-                <label className="field-label">API Key</label>
-                <input
-                  style={{ width: '100%' }}
-                  type="password"
-                  placeholder={p.has_key ? `已配置：${p.api_key_masked}（留空不修改）` : '未配置，请填写 API Key'}
-                  value={d.api_key}
-                  onChange={(e) => setDraftField(p.provider, 'api_key', e.target.value)}
-                />
-
-                <label className="field-label">Base URL</label>
-                <input
-                  style={{ width: '100%' }}
-                  placeholder={p.base_url || 'OpenAI 兼容端点'}
-                  value={d.base_url}
-                  onChange={(e) => setDraftField(p.provider, 'base_url', e.target.value)}
-                />
-
-                <label className="field-label">模型</label>
-                <input
-                  style={{ width: '100%' }}
-                  placeholder={p.model || '模型名'}
-                  value={d.model}
-                  onChange={(e) => setDraftField(p.provider, 'model', e.target.value)}
-                />
-
-                <div className="toolbar" style={{ marginTop: 10 }}>
-                  <button className="btn-primary" onClick={() => saveLLM(p.provider)} disabled={busy !== ''}>
-                    <Icon name="check" size={14} /> {busy === `llm:${p.provider}` ? '保存中…' : '保存'}
-                  </button>
-                  <button className="btn-ghost" onClick={() => test('llm', p.provider)} disabled={busy !== '' || !p.available}>
-                    <Icon name="activity" size={14} /> {busy === `test:llm:${p.provider}` ? '测试中…' : '测试连通'}
-                  </button>
-                  {!isDefault && (
-                    <button className="btn-ghost" onClick={() => setDefault(p.provider)} disabled={busy !== '' || !p.available}>
-                      <Icon name="check" size={14} /> 设为默认
-                    </button>
-                  )}
-                  {isDefault && <span className="tag tool">默认模型</span>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ---------------- 重排序 ---------------- */}
-      {reranker && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>
-              <Icon name="layers" size={16} /> 重排序（两阶段检索）
-            </span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={reranker.enabled}
-                onChange={(e) => setReranker({ ...reranker, enabled: e.target.checked })}
-              />
-              启用
-            </label>
-          </div>
-          <p className="panel-desc" style={{ marginTop: 6 }}>
-            开启后先由向量检索召回 candidate_k 条候选，再用重排序模型精排至 top_n 条，显著提升相关性；
-            调用失败会自动降级为向量检索结果，不阻断问答。
-          </p>
-
-          <div className="grid-2" style={{ marginTop: 4 }}>
-            <div>
-              <label className="field-label">API Key</label>
-              <input
-                style={{ width: '100%' }}
-                type="password"
-                placeholder={snapshot.reranker.has_key ? `已配置：${snapshot.reranker.api_key_masked}（留空不修改）` : '未配置，请填写 API Key'}
-                value={reranker.api_key}
-                onChange={(e) => setReranker({ ...reranker, api_key: e.target.value })}
-              />
-              <label className="field-label">Base URL</label>
-              <input
-                style={{ width: '100%' }}
-                value={reranker.base_url}
-                onChange={(e) => setReranker({ ...reranker, base_url: e.target.value })}
-              />
-              <label className="field-label">重排序模型</label>
-              <input
-                style={{ width: '100%' }}
-                value={reranker.model}
-                onChange={(e) => setReranker({ ...reranker, model: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label">候选数 candidate_k（向量召回数量）</label>
-              <input
-                style={{ width: '100%' }}
-                type="number"
-                min={1}
-                value={reranker.candidate_k}
-                onChange={(e) => setReranker({ ...reranker, candidate_k: Number(e.target.value) })}
-              />
-              <label className="field-label">精排数 top_n（最终返回数量）</label>
-              <input
-                style={{ width: '100%' }}
-                type="number"
-                min={1}
-                value={reranker.top_n}
-                onChange={(e) => setReranker({ ...reranker, top_n: Number(e.target.value) })}
-              />
-            </div>
-          </div>
-
-          <div className="toolbar" style={{ marginTop: 10 }}>
-            <button className="btn-primary" onClick={saveReranker} disabled={busy !== ''}>
-              <Icon name="check" size={14} /> {busy === 'reranker' ? '保存中…' : '保存重排序'}
-            </button>
-            <button className="btn-ghost" onClick={() => test('reranker')} disabled={busy !== '' || !snapshot.reranker.has_key}>
-              <Icon name="activity" size={14} /> {busy === 'test:reranker:' ? '测试中…' : '测试连通'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- 嵌入 ---------------- */}
-      {embedding && (
-        <div className="card">
-          <div className="card-title">
-            <Icon name="database" size={16} /> 嵌入模型
-          </div>
-          <p className="panel-desc" style={{ marginTop: 6 }}>
-            嵌入模型决定向量维度。切换模型或维度后与库内已有向量不一致时检索会返回空，需重新上传文档重建索引。
-          </p>
-          <div className="grid-2" style={{ marginTop: 4 }}>
-            <div>
-              <label className="field-label">提供商</label>
-              <input
-                style={{ width: '100%' }}
-                value={embedding.provider}
-                onChange={(e) => setEmbedding({ ...embedding, provider: e.target.value })}
-              />
-              <label className="field-label">API Key</label>
-              <input
-                style={{ width: '100%' }}
-                type="password"
-                placeholder={snapshot.embedding.has_key ? `已配置：${snapshot.embedding.api_key_masked}（留空不修改）` : '未配置，请填写 API Key'}
-                value={embedding.api_key}
-                onChange={(e) => setEmbedding({ ...embedding, api_key: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label">Base URL</label>
-              <input
-                style={{ width: '100%' }}
-                value={embedding.base_url}
-                onChange={(e) => setEmbedding({ ...embedding, base_url: e.target.value })}
-              />
-              <label className="field-label">模型</label>
-              <input
-                style={{ width: '100%' }}
-                value={embedding.model}
-                onChange={(e) => setEmbedding({ ...embedding, model: e.target.value })}
-              />
-              <label className="field-label">维度 dimension</label>
-              <input
-                style={{ width: '100%' }}
-                type="number"
-                min={1}
-                value={embedding.dimension}
-                onChange={(e) => setEmbedding({ ...embedding, dimension: Number(e.target.value) })}
-              />
-            </div>
-          </div>
-          <div className="toolbar" style={{ marginTop: 10 }}>
-            <button className="btn-primary" onClick={saveEmbedding} disabled={busy !== ''}>
-              <Icon name="check" size={14} /> {busy === 'embedding' ? '保存中…' : '保存嵌入配置'}
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="page-header"><div><h2 className="page-title">系统设置</h2><p className="page-description">统一管理模型提供方、嵌入、重排序与密钥。页面只展示掩码，真实密钥不会回显。</p></div><div className="page-actions"><Button icon={<ReloadOutlined />} loading={loading} onClick={load}>重新加载</Button></div></div>
+      <Row gutter={[18, 18]} style={{ marginBottom: 18 }}>
+        <Col xs={24} md={8}><Card className="panel-card stat-card"><div className="stat-label">默认提供方</div><div className="stat-value" style={{ fontSize: 20 }}>{snapshot?.default_provider || '-'}</div><div className="stat-extra">运行时模型路由</div></Card></Col>
+        <Col xs={24} md={8}><Card className="panel-card stat-card"><div className="stat-label">可用 LLM</div><div className="stat-value">{snapshot?.llm.filter((i) => i.available).length ?? 0}</div><div className="stat-extra">已配置密钥的提供方</div></Card></Col>
+        <Col xs={24} md={8}><Card className="panel-card stat-card"><div className="stat-label">Reranker</div><div className="stat-value" style={{ fontSize: 20 }}>{snapshot?.reranker.enabled ? 'Enabled' : 'Disabled'}</div><div className="stat-extra">两阶段检索</div></Card></Col>
+      </Row>
+      <Card className="panel-card" loading={loading}>
+        <Tabs items={[
+          { key: 'llm', label: 'LLM 提供方', children: llmTab },
+          { key: 'embedding', label: '嵌入模型', children: <Form form={embeddingForm} layout="vertical" style={{ maxWidth: 760 }}><Row gutter={16}><Col xs={24} md={12}><Form.Item name="provider" label="Provider"><Input /></Form.Item></Col><Col xs={24} md={12}><Form.Item name="model" label="模型"><Input /></Form.Item></Col><Col xs={24} md={12}><Form.Item name="base_url" label="Base URL"><Input /></Form.Item></Col><Col xs={24} md={12}><Form.Item name="dimension" label="向量维度"><InputNumber style={{ width: '100%' }} min={1} /></Form.Item></Col><Col span={24}><Form.Item name="api_key" label={`API Key（当前：${snapshot?.embedding.api_key_masked || '未配置'}）`}><Input.Password placeholder="输入新密钥；留空则不修改" autoComplete="new-password" /></Form.Item></Col></Row><Button type="primary" onClick={saveEmbedding}>保存嵌入配置</Button></Form> },
+          { key: 'reranker', label: '重排序', children: <Form form={rerankerForm} layout="vertical" style={{ maxWidth: 760 }}><Form.Item name="enabled" label="启用两阶段重排序" valuePropName="checked"><Switch /></Form.Item><Row gutter={16}><Col xs={24} md={12}><Form.Item name="model" label="模型"><Input /></Form.Item></Col><Col xs={24} md={12}><Form.Item name="base_url" label="Base URL"><Input /></Form.Item></Col><Col xs={24} md={12}><Form.Item name="top_n" label="Top N"><InputNumber style={{ width: '100%' }} min={1} /></Form.Item></Col><Col xs={24} md={12}><Form.Item name="candidate_k" label="候选数"><InputNumber style={{ width: '100%' }} min={1} /></Form.Item></Col><Col span={24}><Form.Item name="api_key" label={`API Key（当前：${snapshot?.reranker.api_key_masked || '未配置'}）`}><Input.Password placeholder="输入新密钥；留空则不修改" autoComplete="new-password" /></Form.Item></Col></Row><Space><Button type="primary" onClick={saveReranker}>保存重排序配置</Button><Button loading={testing === 'reranker:default'} onClick={() => test('reranker')}>测试连接</Button></Space></Form> },
+          { key: 'security', label: '安全说明', children: <div className="two-col"><div className="soft-section"><Space><KeyOutlined style={{ color: '#4f63ff' }} /><Typography.Text strong>密钥脱敏</Typography.Text></Space><Typography.Paragraph type="secondary">接口只返回掩码；留空或掩码不会覆盖现有密钥。生产蓝图建议进一步迁移到 Secret Manager/KMS。</Typography.Paragraph></div><div className="soft-section"><Space><SafetyCertificateOutlined style={{ color: '#16a34a' }} /><Typography.Text strong>生产提醒</Typography.Text></Space><Typography.Paragraph type="secondary">当前单机版本尚未实现认证、多租户与审计；请在生产化路线中优先完成 P0 安全底座。</Typography.Paragraph></div><div className="soft-section"><Space><CheckCircleOutlined style={{ color: '#16a34a' }} /><Typography.Text strong>热更新</Typography.Text></Space><Typography.Paragraph type="secondary">配置保存后运行时生效，无需重启服务；嵌入模型更换后仍建议规划索引重建。</Typography.Paragraph></div></div> },
+        ]} />
+      </Card>
     </div>
   )
 }

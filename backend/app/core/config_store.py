@@ -95,17 +95,24 @@ class RuntimeConfigStore:
             self._llm, self._embedding, self._reranker = {}, {}, {}
             self._default_provider = None
 
-    def _persist(self) -> None:
-        """将覆盖配置原子落盘（先写临时文件再替换）。"""
+    def _persist_state(
+        self,
+        *,
+        llm: Dict[str, Dict[str, str]],
+        embedding: Dict[str, object],
+        reranker: Dict[str, object],
+        default_provider: Optional[str],
+    ) -> None:
+        """将候选覆盖配置原子落盘；调用方仅在成功后才替换内存状态。"""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         with tmp.open("w", encoding="utf-8") as f:
             json.dump(
                 {
-                    "llm": self._llm,
-                    "embedding": self._embedding,
-                    "reranker": self._reranker,
-                    "default_provider": self._default_provider,
+                    "llm": llm,
+                    "embedding": embedding,
+                    "reranker": reranker,
+                    "default_provider": default_provider,
                 },
                 f,
                 ensure_ascii=False,
@@ -186,8 +193,15 @@ class RuntimeConfigStore:
                 cur["base_url"] = base_url.strip()
             if model is not None:
                 cur["model"] = model.strip()
-            self._llm[provider] = cur
-            self._persist()
+            next_llm = {name: dict(cfg) for name, cfg in self._llm.items()}
+            next_llm[provider] = cur
+            self._persist_state(
+                llm=next_llm,
+                embedding=dict(self._embedding),
+                reranker=dict(self._reranker),
+                default_provider=self._default_provider,
+            )
+            self._llm = next_llm
 
     def default_provider(self) -> str:
         """有效默认提供商（覆盖优先，回落到 .env）。"""
@@ -200,8 +214,13 @@ class RuntimeConfigStore:
         if provider not in _LLM_PROVIDERS:
             raise ValueError(f"不支持的 LLM 提供商: {provider}")
         with self._lock:
+            self._persist_state(
+                llm={name: dict(cfg) for name, cfg in self._llm.items()},
+                embedding=dict(self._embedding),
+                reranker=dict(self._reranker),
+                default_provider=provider,
+            )
             self._default_provider = provider
-            self._persist()
 
     def llm_configs(self) -> Dict[str, Dict[str, str]]:
         """返回全部提供商的有效配置字典（供工厂构建实例）。"""
@@ -222,6 +241,29 @@ class RuntimeConfigStore:
             "model": o.get("model") or s.embedding_model,
             "dimension": int(o.get("dimension") or s.embedding_dimension),
         }
+
+    def preview_embedding(
+        self,
+        *,
+        provider: Optional[str] = None,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        dimension: Optional[int] = None,
+    ) -> Dict[str, object]:
+        """预览应用本次字段后的有效嵌入配置，用于写入前验证。"""
+        merged = self.effective_embedding()
+        if provider is not None:
+            merged["provider"] = provider.strip().lower()
+        if api_key is not None and not is_masked(api_key):
+            merged["api_key"] = api_key.strip()
+        if base_url is not None:
+            merged["base_url"] = base_url.strip()
+        if model is not None:
+            merged["model"] = model.strip()
+        if dimension is not None:
+            merged["dimension"] = int(dimension)
+        return merged
 
     def set_embedding(
         self,
@@ -245,8 +287,13 @@ class RuntimeConfigStore:
                 cur["model"] = model.strip()
             if dimension is not None:
                 cur["dimension"] = int(dimension)
+            self._persist_state(
+                llm={name: dict(cfg) for name, cfg in self._llm.items()},
+                embedding=cur,
+                reranker=dict(self._reranker),
+                default_provider=self._default_provider,
+            )
             self._embedding = cur
-            self._persist()
 
     # ------------------------------------------------------------------
     # 重排序
@@ -291,8 +338,13 @@ class RuntimeConfigStore:
                 cur["top_n"] = int(top_n)
             if candidate_k is not None:
                 cur["candidate_k"] = int(candidate_k)
+            self._persist_state(
+                llm={name: dict(cfg) for name, cfg in self._llm.items()},
+                embedding=dict(self._embedding),
+                reranker=cur,
+                default_provider=self._default_provider,
+            )
             self._reranker = cur
-            self._persist()
 
     # ------------------------------------------------------------------
     # 脱敏快照
