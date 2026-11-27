@@ -125,7 +125,7 @@ class LLMFactory:
             List[dict]: 每项含 provider/model/available/description。
         """
         configs = self._provider_configs()
-        return [
+        models = [
             {
                 "provider": name,
                 "model": cfg["model"],
@@ -134,6 +134,9 @@ class LLMFactory:
             }
             for name, cfg in configs.items()
         ]
+        # 前端默认选择列表首项；让运行时默认 provider 排在最前，避免无意覆盖服务端默认路由
+        default_provider = self.default_provider_name()
+        return sorted(models, key=lambda item: item["provider"] != default_provider)
 
 
 # 全局工厂单例

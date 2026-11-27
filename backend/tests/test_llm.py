@@ -99,3 +99,10 @@ def test_factory_default_provider_name_falls_back_to_env():
     """无运行时配置时，default_provider_name 应回落到 .env 默认值。"""
     factory = LLMFactory(Settings(default_llm_provider="deepseek"))
     assert factory.default_provider_name() == "deepseek"
+
+def test_factory_available_models_prioritizes_default_provider():
+    """模型清单应把默认 provider 排在首位，供前端安全默认选择。"""
+    settings = _settings_with_keys()
+    settings.default_llm_provider = "mimo"
+    factory = LLMFactory(settings)
+    assert factory.available_models()[0]["provider"] == "mimo"
