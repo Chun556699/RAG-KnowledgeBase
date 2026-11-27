@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Avatar, Button, Card, Checkbox, Input, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Avatar, Button, Card, Checkbox, Collapse, Input, Space, Spin, Tag, Typography } from 'antd'
 import BranchesOutlined from '@ant-design/icons/BranchesOutlined'
 import LinkOutlined from '@ant-design/icons/LinkOutlined'
 import RobotOutlined from '@ant-design/icons/RobotOutlined'
@@ -99,10 +99,16 @@ export default function ChatPanel({ model }: { model: SelectedModel | null }) {
                 </div>
               )}
               {message.graph_triples?.length ? (
-                <div className="message-meta"><Tag icon={<BranchesOutlined />} color="cyan">图谱关系 {message.graph_triples.length}</Tag>{message.graph_triples.slice(0, 3).map((t, i) => <Tag key={i}>{t.source} → {t.relation} → {t.target}</Tag>)}</div>
+                <div className="message-meta">
+                  <Tag icon={<BranchesOutlined />} color="cyan">图谱关系 {message.graph_triples.length}</Tag>
+                  <Collapse ghost size="small" style={{ width: '100%' }} items={[{ key: 'graph', label: '查看全部图谱关系', children: <div style={{ display: 'grid', gap: 6 }}>{message.graph_triples.map((t, i) => <Tag key={i} style={{ width: 'fit-content' }}>{t.source} → {t.relation} → {t.target}</Tag>)}</div> }]} />
+                </div>
               ) : null}
               {message.sources?.length ? (
-                <div className="message-meta"><Tag icon={<LinkOutlined />} color="blue">参考来源 {message.sources.length}</Tag>{message.sources.slice(0, 3).map((s, i) => <Tag key={i}>{s.filename} · {(s.score * 100).toFixed(0)}%</Tag>)}</div>
+                <div className="message-meta">
+                  <Tag icon={<LinkOutlined />} color="blue">参考来源 {message.sources.length}</Tag>
+                  <Collapse ghost size="small" style={{ width: '100%' }} items={[{ key: 'sources', label: '查看引用证据', children: <div style={{ display: 'grid', gap: 8 }}>{message.sources.map((source, i) => <div key={i} className="soft-section"><Space wrap><Tag color="blue">{source.filename}</Tag><Tag>{(source.score * 100).toFixed(0)}%</Tag></Space><Typography.Paragraph type="secondary" style={{ margin: '6px 0 0' }}>{source.text}</Typography.Paragraph></div>)}</div> }]} />
+                </div>
               ) : null}
             </div>
             {message.role === 'user' && <Avatar style={{ marginLeft: 10, background: '#0f172a', flexShrink: 0 }} icon={<UserOutlined />} />}
