@@ -89,6 +89,9 @@ class Container:
             dense_weight=settings.hybrid_dense_weight,
             sparse_weight=settings.hybrid_sparse_weight,
         )
+        # BM25 是内存索引：启动时从持久化向量库回填，避免重启后混合检索静默退化
+        if sparse_index is not None:
+            logger.info("BM25 稀疏索引回填完成：%d 个片段", self.retriever.rebuild_sparse_index())
 
         # 文档服务：编排上传 → 解析 → 索引 → 元数据管理
         self.documents = DocumentService(

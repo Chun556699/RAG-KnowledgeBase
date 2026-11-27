@@ -233,6 +233,22 @@ class Retriever:
             for cid, rrf_score in ranked
         ]
 
+    def rebuild_sparse_index(self) -> int:
+        """
+        从向量库已有片段重建稀疏索引。
+
+        BM25Index 当前是内存索引；服务重启后若不回填，混合检索会静默退化为
+        单向量检索。容器启动时调用本方法，使稀疏路与持久化向量库保持一致。
+
+        Returns:
+            int: 回填后的稀疏索引片段数；未启用稀疏索引时返回 0。
+        """
+        if self._sparse is None:
+            return 0
+        for chunk in self._store.all_chunks():
+            self._sparse.add(chunk.chunk_id, chunk.text, chunk.metadata)
+        return self._sparse.count()
+
     def delete_document(self, document_id: str) -> None:
         """删除某文档的全部索引片段。"""
         self._store.delete_by_document(document_id)
