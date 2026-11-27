@@ -25,6 +25,7 @@ export default function PromptPanel() {
   useEffect(() => { load() }, [])
 
   const openEdit = (item: PromptTemplate) => {
+    setCreating(false)
     setEditing(item)
     form.setFieldsValue(item)
   }
