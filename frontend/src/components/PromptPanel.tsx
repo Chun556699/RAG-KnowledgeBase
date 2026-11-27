@@ -61,9 +61,9 @@ export default function PromptPanel() {
           <Card className="panel-card" title={editing ? `编辑：${editing.name || '新模板'}` : '模板预览'}>
             {editing ? (
               <Form form={form} layout="vertical">
-                <Form.Item name="name" label="模板名称" rules={[{ required: true, message: '请输入名称' }]}><Input disabled={!creating && !!editing?.name} placeholder="例如 rag_answer" /></Form.Item>
-                <Form.Item name="description" label="用途说明" rules={[{ required: true, message: '请输入说明' }]}><Input placeholder="描述该模板在哪个链路使用" /></Form.Item>
-                <Form.Item name="template" label="模板内容" rules={[{ required: true, message: '请输入模板' }]}><Input.TextArea rows={14} className="mono" placeholder="支持 {context}、{question} 等变量，按后端模板约定填写" /></Form.Item>
+                <Form.Item name="name" label="模板名称" rules={[{ required: true, whitespace: true, message: '请输入非空名称' }]}><Input disabled={!creating && !!editing?.name} placeholder="例如 rag_answer" /></Form.Item>
+                <Form.Item name="description" label="用途说明" rules={[{ required: true, whitespace: true, message: '请输入非空说明' }]}><Input placeholder="描述该模板在哪个链路使用" /></Form.Item>
+                <Form.Item name="template" label="模板内容" rules={[{ required: true, whitespace: true, message: '请输入非空模板' }]}><Input.TextArea rows={14} className="mono" placeholder="支持 {context}、{question} 等变量，按后端模板约定填写" /></Form.Item>
                 <Space><Button type="primary" onClick={save}>保存模板</Button><Button onClick={() => { setEditing(null); setCreating(false) }}>取消</Button></Space>
               </Form>
             ) : (
