@@ -136,7 +136,7 @@ button, input, textarea, select { font: inherit; }
   .chat-workspace { height:auto; min-height:calc(100vh - 68px - 32px); }
   .graph-canvas { height:420px; }
 }
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
   .desktop-sider { display:none !important; }
   .mobile-menu-btn { display:inline-flex; }
   .app-header { padding:0 14px; }
