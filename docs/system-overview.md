@@ -37,7 +37,7 @@
 - **模型 / 服务**：DeepSeek · 小米 MiMo（OpenAI 兼容）；嵌入 bge-m3；重排序 bge-reranker-v2-m3（OpenAI 兼容 `/rerank`）
 - **前端**：React 18 · Vite 5 · TypeScript（strict）· 原生 SSE 流式解析 · cytoscape
 - **部署**：Docker · Docker Compose · Nginx（静态托管 + API 反向代理）
-- **测试**：pytest · pytest-asyncio（77 例，全离线）
+- **测试**：pytest · pytest-asyncio（78 例，全离线）
 
 ---
 
@@ -86,7 +86,7 @@
 - **工厂模式**：LLM / 嵌入 / 重排序均以工厂创建，按配置产出对应实现，新增厂商符合开闭原则。
 - **单一事实来源**：凭据统一由 `RuntimeConfigStore` 提供（运行时覆盖层叠加只读 `.env`），LLM 工厂 / 嵌入 / 重排序全部从它读取「有效配置」。
 - **优雅降级**：重排序、澄清、查询改写、Agent 规划均有失败兜底，保障可用性。
-- **可测试性**：核心层不依赖 Web 框架，离线 Mock 让 77 例单测无需密钥 / 网络。
+- **可测试性**：核心层不依赖 Web 框架，离线 Mock 让 78 例单测无需密钥 / 网络。
 
 ---
 
@@ -180,7 +180,7 @@ long_term  长期记忆(key, value, topic, importance, expires_at) + idx_long_te
 
 - **为什么加重排序？** 单阶段向量召回受 bi-encoder 表达力限制，长尾 / 近义 query 排序不稳；引入 cross-encoder 对 query-doc 逐对精排，用「召回宽 + 精排准」换质量，并做失败降级守住可用性——体现对检索质量与稳定性的权衡。
 - **密钥脱密怎么做的？** 读接口只出掩码；写接口把「空值 / 掩码值」判定为「不修改」，避免误清真实密钥；`.env` 只读、覆盖层落盘、`RLock` + 原子写——体现安全意识与并发正确性。
-- **为什么保留 Mock 嵌入？** 保证零密钥跑通整条链路 → 演示、CI、单测全离线（77 例）；生产切真实语义嵌入——体现可测试性与工程化取舍。
+- **为什么保留 Mock 嵌入？** 保证零密钥跑通整条链路 → 演示、CI、单测全离线（78 例）；生产切真实语义嵌入——体现可测试性与工程化取舍。
 - **知识图谱如何兼顾速度 / 成本 / 稳定？** 信号量限流 + gather 并发 + round-robin 采样 + 单片段失败隔离。
 - **Agent 如何避免脆弱？** 规划失败兜底单步、工具白名单防注入、JSON 容错解析、反思迭代上限。
 
@@ -188,7 +188,7 @@ long_term  长期记忆(key, value, topic, importance, expires_at) + idx_long_te
 
 ## 八、工程化
 
-- **测试**：77 例 pytest 单测，覆盖嵌入 / 分块 / 解析 / 记忆 / 工具 / LLM 工厂 / 检索 / 向量库，**全离线无需密钥**。
+- **测试**：78 例 pytest 单测，覆盖嵌入 / 分块 / 解析 / 记忆 / 工具 / LLM 工厂 / 检索 / 向量库，**全离线无需密钥**。
 - **配置**：pydantic-settings 类型校验 + 默认值，`ensure_directories()` 首启自动建目录，默认零密钥可跑。
 - **错误处理**：`AppException` 体系（`ValidationError / NotFoundError / ProviderError`）→ 全局处理器统一 `{error, message}`；未预期异常返回 500 不泄露堆栈。
 - **可观测**：统一 logger，关键路径（向量库就绪、记忆连接、工具注册、图谱构建、配置变更）均有日志。
@@ -210,7 +210,7 @@ long_term  长期记忆(key, value, topic, importance, expires_at) + idx_long_te
 
 **加分 bullet（可替换 / 追加）**
 - **Web 端密钥热切换 + 脱密**：运行时配置层叠加只读 `.env`，网页即可切换多模型 / 嵌入 / 重排序密钥且免重启；对外仅返回掩码，密钥不出网页。
-- **架构工程化**：分层 + 组合根 + 依赖倒置，核心层可独立单测（77 例全离线通过）。
+- **架构工程化**：分层 + 组合根 + 依赖倒置，核心层可独立单测（78 例全离线通过）。
 
 **ATS 关键词**
 > `Python · FastAPI · asyncio · Pydantic v2 · RAG · 向量检索 · Embedding(bge-m3) · Reranker(cross-encoder) · 两阶段检索 · LLM · Agent · ReAct · Prompt Engineering · SSE 流式 · 密钥脱敏 · 热重载 · React 18 · TypeScript · Vite · cytoscape · Docker · Nginx · SQLite · numpy · 工厂模式 · 依赖倒置 · 组合根 · 单元测试`

@@ -12,7 +12,7 @@
 2. 离线可跑：Mock 嵌入、numpy 向量库、SQLite 让演示与单元测试无需外部服务。
 3. 已有先进概念雏形：混合检索、RRF、Cross-Encoder rerank、CRAG、GraphRAG、RAGAS 风格评估、SSE。
 4. 可插拔意识好：LLM、Embedder、Reranker 均有抽象或工厂。
-5. 测试基础可用：审计基线 74 个离线单元测试全部通过；本分支新增 BM25 重启回归测试后为 77 个，适合继续扩展为核心逻辑回归网。
+5. 测试基础可用：审计基线 74 个离线单元测试全部通过；本分支新增 BM25 重启回归测试后为 78 个，适合继续扩展为核心逻辑回归网。
 
 这些优点应该保留，不应推倒重写。
 
@@ -103,7 +103,7 @@
 已在本次分支顺手修复两项低风险问题：
 
 - **BM25 重启丢失（已修复）**：`Retriever.rebuild_sparse_index()` 会在启动时从 `VectorStore.all_chunks()` 回填内存 BM25，并新增回归测试。
-- **文档测试数量过期（已修复）**：README/系统文档已从 49 例更新为当前 77 例。
+- **文档测试数量过期（已修复）**：README/系统文档已从 49 例更新为当前 78 例。
 
 仍需立即修正：
 
@@ -166,7 +166,7 @@ cd backend
 python -m venv .venv
 pip install -r requirements.txt
 pytest -q
-# 审计基线结果：74 passed；本分支新增回归测试后：77 passed
+# 审计基线结果：74 passed；本分支新增回归测试后：78 passed
 
 cd frontend
 npm ci
