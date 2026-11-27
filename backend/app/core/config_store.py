@@ -223,16 +223,28 @@ class RuntimeConfigStore:
             "dimension": int(o.get("dimension") or s.embedding_dimension),
         }
 
-    def embedding_override(self) -> Dict[str, object]:
-        """返回当前嵌入覆盖层副本，供配置更新失败时做事务性回滚。"""
-        with self._lock:
-            return dict(self._embedding)
-
-    def restore_embedding_override(self, override: Dict[str, object]) -> None:
-        """恢复嵌入覆盖层并落盘；仅用于失败配置更新的内部回滚。"""
-        with self._lock:
-            self._embedding = dict(override)
-            self._persist()
+    def preview_embedding(
+        self,
+        *,
+        provider: Optional[str] = None,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        dimension: Optional[int] = None,
+    ) -> Dict[str, object]:
+        """预览应用本次字段后的有效嵌入配置，用于写入前验证。"""
+        merged = self.effective_embedding()
+        if provider is not None:
+            merged["provider"] = provider.strip().lower()
+        if api_key is not None and not is_masked(api_key):
+            merged["api_key"] = api_key.strip()
+        if base_url is not None:
+            merged["base_url"] = base_url.strip()
+        if model is not None:
+            merged["model"] = model.strip()
+        if dimension is not None:
+            merged["dimension"] = int(dimension)
+        return merged
 
     def set_embedding(
         self,

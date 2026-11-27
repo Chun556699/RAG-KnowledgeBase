@@ -22,7 +22,7 @@ from app.core.graph.search import GraphSearcher
 from app.core.llm.factory import LLMFactory, get_llm_factory
 from app.core.memory.manager import MemoryManager
 from app.core.memory.store import MemoryStore
-from app.core.rag.embeddings import create_embedder
+from app.core.rag.embeddings import BaseEmbedder, create_embedder
 from app.core.rag.reranker import create_reranker
 from app.core.rag.retriever import Retriever
 from app.core.rag.sparse import BM25Index
@@ -164,16 +164,17 @@ class Container:
             create_reranker(rr_cfg), candidate_k=int(rr_cfg["candidate_k"])
         )
 
-    def reload_embedding(self) -> None:
-        """嵌入配置变更后重建嵌入器并热替换（若维度变化需重建索引）。"""
-        emb_cfg = self.config_store.effective_embedding()
-        embedder = create_embedder(
-            str(emb_cfg["provider"]),
-            dimension=int(emb_cfg["dimension"]),
-            api_key=str(emb_cfg["api_key"]),
-            base_url=str(emb_cfg["base_url"]),
-            model=str(emb_cfg["model"]),
-        )
+    def reload_embedding(self, embedder: Optional[BaseEmbedder] = None) -> None:
+        """热替换嵌入器；未提供实例时按当前配置重建。"""
+        if embedder is None:
+            emb_cfg = self.config_store.effective_embedding()
+            embedder = create_embedder(
+                str(emb_cfg["provider"]),
+                dimension=int(emb_cfg["dimension"]),
+                api_key=str(emb_cfg["api_key"]),
+                base_url=str(emb_cfg["base_url"]),
+                model=str(emb_cfg["model"]),
+            )
         self.retriever.set_embedder(embedder)
 
     def shutdown(self) -> None:
