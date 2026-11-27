@@ -49,11 +49,14 @@ export default function SettingsPanel() {
   }
   const saveLLM = async (provider: string) => {
     const values = llmForms.getFieldsValue()
+    const current = snapshot?.llm.find((item) => item.provider === provider)
+    const modelValue = values[`${provider}.model`]
+    const baseUrlValue = values[`${provider}.base_url`]
     try {
       const data = await api.updateLLMConfig(provider, {
         api_key: values[`${provider}.api_key`] || undefined,
-        base_url: values[`${provider}.base_url`] || undefined,
-        model: values[`${provider}.model`] || undefined,
+        base_url: baseUrlValue && baseUrlValue !== current?.base_url ? baseUrlValue : undefined,
+        model: modelValue && modelValue !== current?.model ? modelValue : undefined,
       })
       setSnapshot(data)
       message.success('LLM 配置已保存；密钥不回显')
