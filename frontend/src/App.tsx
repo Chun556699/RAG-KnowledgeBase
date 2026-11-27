@@ -151,7 +151,7 @@ export default function App() {
               <SidebarContent tab={tab} onSelect={selectTab} model={model} setModel={setModel} healthy={healthy} />
             </Layout.Sider>
           ) : (
-            <Drawer placement="left" width={286} open={drawerOpen} onClose={() => setDrawerOpen(false)} closable={false}>
+            <Drawer placement="left" width={286} open={drawerOpen} onClose={() => setDrawerOpen(false)} closable={false} forceRender>
               <SidebarContent tab={tab} onSelect={selectTab} model={model} setModel={setModel} healthy={healthy} />
             </Drawer>
           )}
