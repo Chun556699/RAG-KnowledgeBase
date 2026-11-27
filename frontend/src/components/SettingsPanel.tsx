@@ -23,10 +23,11 @@ export default function SettingsPanel() {
     data.llm.forEach((item) => {
       values[`${item.provider}.model`] = item.model
       values[`${item.provider}.base_url`] = item.base_url
+      values[`${item.provider}.api_key`] = ''
     })
     llmForms.setFieldsValue(values)
-    embeddingForm.setFieldsValue(data.embedding)
-    rerankerForm.setFieldsValue(data.reranker)
+    embeddingForm.setFieldsValue({ ...data.embedding, api_key: '' })
+    rerankerForm.setFieldsValue({ ...data.reranker, api_key: '' })
   }
   const load = async () => {
     setLoading(true)
