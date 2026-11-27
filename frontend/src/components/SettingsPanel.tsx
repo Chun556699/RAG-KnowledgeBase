@@ -96,7 +96,7 @@ export default function SettingsPanel() {
               <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>{item.description}</Typography.Paragraph><Form.Item name={`${item.provider}.model`} label="模型"><Input placeholder="模型名称" /></Form.Item>
               <Form.Item name={`${item.provider}.base_url`} label="Base URL"><Input placeholder="https://api.example.com/v1" /></Form.Item>
               <Form.Item name={`${item.provider}.api_key`} label={`API Key（当前：${item.api_key_masked || '未配置'}）`}><Input.Password placeholder="输入新密钥；留空则不修改" autoComplete="new-password" /></Form.Item>
-              <Space wrap><Button type="primary" onClick={() => saveLLM(item.provider)}>保存</Button><Button loading={testing === `llm:${item.provider}`} onClick={() => test('llm', item.provider)}>测试连接</Button><Button onClick={() => saveDefault(item.provider)} disabled={snapshot.default_provider === item.provider}>设为默认</Button></Space>
+              <Space wrap><Button type="primary" onClick={() => saveLLM(item.provider)}>保存</Button><Button loading={testing === `llm:${item.provider}`} onClick={() => test('llm', item.provider)}>测试连接</Button><Button onClick={() => saveDefault(item.provider)} disabled={snapshot.default_provider === item.provider || !item.available}>设为默认</Button></Space>
             </Card>
           </Col>
         ))}
