@@ -58,6 +58,7 @@ export default function SettingsPanel() {
         base_url: baseUrlValue && baseUrlValue !== current?.base_url ? baseUrlValue : undefined,
         model: modelValue && modelValue !== current?.model ? modelValue : undefined,
       })
+      llmForms.setFieldsValue({ [`${provider}.api_key`]: '' })
       setSnapshot(data)
       message.success('LLM 配置已保存；密钥不回显')
     } catch (err) { message.error((err as Error).message) }
@@ -66,8 +67,8 @@ export default function SettingsPanel() {
     const values = await embeddingForm.validateFields()
     try {
       const data = await api.updateEmbeddingConfig({ ...values, api_key: values.api_key || undefined })
+      embeddingForm.setFieldsValue({ api_key: '' })
       setSnapshot(data)
-      fillForms(data)
       message.success('嵌入配置已保存；如更换模型，建议重建索引')
     } catch (err) { message.error((err as Error).message) }
   }
@@ -75,8 +76,8 @@ export default function SettingsPanel() {
     const values = await rerankerForm.validateFields()
     try {
       const data = await api.updateRerankerConfig({ ...values, api_key: values.api_key || undefined })
+      rerankerForm.setFieldsValue({ api_key: '' })
       setSnapshot(data)
-      fillForms(data)
       message.success('重排序配置已保存')
     } catch (err) { message.error((err as Error).message) }
   }
